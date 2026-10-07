@@ -72,7 +72,7 @@ const BatteryLifeModel=(()=>{
     if(!point.scenariosH.every(Number.isFinite))return {point,bins:[],meanH:null,stddevH:null,varianceH2:null,reason:'Mindestens ein Szenario hat keinen Verbrauch und damit keine endliche Laufzeit. Eine endliche Verteilung ist nicht möglich.'};
     const weights=data.weights||data.samples.map(()=>1/data.count);
     const stats=weightedStatistics(point.scenariosH,weights);
-    const meanH=point.expectedH,stddevH=stats.stddev,varianceH2=stats.variance;
+    const meanH=stats.mean,stddevH=stats.stddev,varianceH2=stats.variance;
     if(point.minH===point.maxH)return {point,meanH,stddevH,varianceH2,bins:[],reason:stddevH==null?'Nur ein gültiger Zyklus: eine Laufzeit, keine Streuungsauswertung.':'Alle gemessenen Szenarien haben dieselbe Laufzeit; die Streuung ist null.'};
     const count=Math.min(30,Math.max(2,Math.ceil(Math.sqrt(data.count))));
     const width=(point.maxH-point.minH)/count,total=weights.reduce((a,b)=>a+b,0);
@@ -113,7 +113,7 @@ const BatteryLifeModel=(()=>{
     }
     const weightedMean=key=>prepared.reduce((n,s)=>n+s.data[key]*s.weight/total,0);
     const percentile=(key,q=.5)=>weightedQuantile(samples.map(s=>s[key]),weights,q);
-    return {samples,weights,sources:details,weighting,count:samples.length,
+    return {samples,weights,sources:details,groups:prepared.filter(s=>s.weight>0).map(s=>({data:s.data,share:s.weight/total})),weighting,count:samples.length,
       activeMeasurementCount:details.filter(s=>s.share>0).length,
       voltageV:[...new Set(details.filter(s=>s.share>0).map(s=>s.voltageV))].join(' / '),
       interpolatedCount:prepared.reduce((n,s)=>n+(s.weight?s.data.interpolatedCount:0),0),
@@ -130,7 +130,35 @@ const BatteryLifeModel=(()=>{
       return {x,...evaluate(data,energyWh,mode,x)};
     });
   }
-  return {profile,combine,evaluate,curve,distribution};
+  function uncertainty(data,energyWh,mode,value){
+    const original=evaluate(data,energyWh,mode,value),center=original.expectedH;
+    const groups=data.groups||[{data,share:1}];
+    const result={point:{...original},meanH:center,standardErrorH:null,logVariance:null,density:[],available:false,reason:''};
+    if(!Number.isFinite(center)){result.reason='Kein mittlerer Verbrauch: keine endliche Laufzeitschätzung.';return result}
+    if(groups.some(g=>g.data.count<2)){result.reason='Für die Unsicherheit sind mindestens zwei gültige Zyklen je Messung mit positivem Einfluss erforderlich.';return result}
+    const t=original.sleepS,A=3600*data.wakeEnergyUwh+data.sleepPowerUw*t;
+    const gW=-3600/A,gS=-t/A;
+    const gD=mode==='sleep'?1/(data.wakeS+t):1/data.wakeS-data.sleepPowerUw*(100/value-1)/A;
+    let logVariance=0;
+    for(const group of groups){
+      const d=group.data,meanSleep=average(d.samples.map(s=>s.sleepS));
+      const influences=d.samples.map(s=>gW*(s.wakeEnergyUwh-d.wakeEnergyUwh)+gD*(s.wakeS-d.wakeS)+
+        gS*(s.sleepEnergyUwh*3600-d.sleepPowerUw*s.sleepS)/meanSleep);
+      logVariance+=group.share**2*statistics(influences).variance/d.count;
+    }
+    const sigma=Math.sqrt(Math.max(0,logVariance));
+    result.available=true;result.logVariance=logVariance;result.standardErrorH=center*sigma;
+    const q=z=>center*Math.exp(z*sigma);
+    Object.assign(result.point,{minH:q(-4),p05H:q(-1.6448536269514722),lowH:q(-1.2815515655446004),medianH:center,highH:q(1.2815515655446004),p95H:q(1.6448536269514722),maxH:q(4)});
+    if(!Number.isFinite(result.point.maxH)){result.available=false;result.reason='Die Unsicherheit ist zu groß für eine endliche Näherung. Weitere repräsentative Messungen sind nötig.';return result}
+    if(sigma===0){result.reason='Keine Streuung in den beobachteten Zyklen: geschätzte statistische Unsicherheit null; systematische Fehler sind nicht enthalten.';return result}
+    result.density=Array.from({length:321},(_,i)=>{
+      const z=-4+8*i/320,hours=q(z);
+      return {hours,densityPerH:Math.exp(-z*z/2)/(Math.sqrt(2*Math.PI)*sigma*hours)};
+    });
+    result.reason='';return result;
+  }
+  return {profile,combine,evaluate,curve,distribution,uncertainty};
 })();
 
 const BatteryLifeUI=(()=>{
@@ -176,41 +204,40 @@ const BatteryLifeUI=(()=>{
     const token=++renderToken;
     try{
       const {energyWh,value}=settings();
-      const distribution=BatteryLifeModel.distribution(data,energyWh,mode(),value);
-      const point=distribution.point,bins=distribution.bins;
+      const distribution=BatteryLifeModel.uncertainty(data,energyWh,mode(),value);
+      const point=distribution.point,hasCurve=distribution.density.length>0;
       const median=mode()==='sleep'?data.medianSleepS:data.medianDutyPct;
       el('MeasuredMedian').textContent=`Gemessener Median: ${number(median/factor())} ${unit()}`;
       el('Runtime').textContent=life(point.expectedH);
-      el('Band').textContent=data.count>1?`${life(point.p05H)} bis ${life(point.p95H)}`:'Ab zwei gültigen Zyklen';
+      el('Band').textContent=distribution.available?`${life(point.p05H)} bis ${life(point.p95H)}`:'Nicht schätzbar';
       el('Power').textContent=point.powerUw>=1000?`${number(point.powerUw/1000)} mW`:`${number(point.powerUw)} µW`;
       el('Timing').textContent=`Sleep ${fmtDuration(point.sleepS)} · Wake ${fmtEventDuration(data.wakeS*1e6)} · Duty ${number(point.dutyPct)} %`;
       el('WakeEnergy').textContent=fmtEnergy(data.medianWakeEnergyUwh);
-      el('DistributionNote').textContent=distribution.reason||`Gemessene Verbrauchsszenarien: ${life(point.minH)} bis ${life(point.maxH)}. Die Kurve zeigt eine geglättete Schätzung der gewichteten Verteilungsdichte innerhalb dieser Grenzen. Die Fläche unter der Kurve entspricht 100 %; die Höhe ist kein Anteil an einer einzelnen Laufzeit. Bei wenigen Zyklen hängt die Form stark von der Glättung ab. P5–P95 bleiben empirische Perzentile der Messwerte. Die Achse skaliert automatisch; Kapazitätsänderungen können eine ähnliche Kurvenform ergeben.`;
-      el('PercentileRows').innerHTML=[['Minimum',0,'minH'],['P5',5,'p05H'],['P10',10,'lowH'],['P50',50,'medianH'],['P90',90,'highH'],['P95',95,'p95H'],['Maximum',100,'maxH']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${data.count>1||p===50?life(point[key]):'Ab zwei gültigen Zyklen'}</td></tr>`).join('');
+      el('DistributionNote').textContent=(distribution.reason||`Standardunsicherheit der Laufzeitschätzung: ${life(distribution.standardErrorH)}. Die blaue Kurve zeigt die angenäherte statistische Unsicherheit der mittleren Laufzeit; der schattierte Bereich ist ein näherungsweises 90-%-Intervall.`)+' Die Berechnung setzt unabhängige, repräsentative Zyklen und unabhängige Messungen voraus. Zusammenhänge innerhalb eines Sleep-/Wake-Paars werden berücksichtigt. Messungsanteile und Batterieenergie gelten als fest. Bei wenigen Zyklen oder großer Streuung ist die Näherung eingeschränkt. Zeitliche Abhängigkeiten, systematische Messfehler, Alterung und Selbstentladung sind nicht enthalten.';
+      el('PercentileRows').innerHTML=[['Untere 90-%-Grenze · P5',5,'p05H'],['P10',10,'lowH'],['Laufzeitschätzung · P50',50,'medianH'],['P90',90,'highH'],['Obere 90-%-Grenze · P95',95,'p95H']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${distribution.available?life(point[key]):'Nicht schätzbar'}</td></tr>`).join('');
       el('StatisticsRows').innerHTML=[['Wake-Energie','wakeEnergy','µWh'],['Sleep-Energie · gemessene Dauer','sleepEnergy','µWh'],['Sleep-Leistung · auf Dauer normiert','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}</tr>`).join('');
       el('Export').disabled=false;
       status(`${data.sources.length} ausgewählte Messungen · ${data.activeMeasurementCount} mit positivem Einfluss · ${data.count} gültige Zyklen bei ${data.voltageV} V${data.interpolatedCount?` · ${data.interpolatedCount} Zyklen mit ergänzten Datenlücken`:''}. ${data.count<2?'Für eine Streuungsauswertung sind mindestens zwei Zyklen nötig.':''}`);
       const display=point.expectedH>=8760?{factor:8760,label:'Jahre'}:point.expectedH>=2160?{factor:730,label:'Monate'}:point.expectedH>=336?{factor:168,label:'Wochen'}:{factor:24,label:'Tage'};
       const traces=[],shapes=[],annotations=[];
-      if(bins.length)traces.push({x:distribution.density.map(p=>p.hours/display.factor),y:distribution.density.map(p=>p.densityPerH*display.factor*100),type:'scatter',mode:'lines',line:{color:'#6ea8fe',width:2.5,shape:'linear'},fill:'tozeroy',fillcolor:'rgba(110,168,254,.18)',name:'Geglättete Messszenarien',hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<br>Dichte: %{y:.3f} % / ${display.label}<extra></extra>`});
-      if(data.count>1&&Number.isFinite(point.maxH))shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.minH/display.factor,x1:point.maxH/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.08)',line:{width:0},layer:'below'});
-      if(bins.length)shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.p05H/display.factor,x1:point.p95H/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.18)',line:{width:0},layer:'below'});
-      const markers=[[point.expectedH,'Laufzeit aus mittlerer Leistung','#65d98b','solid'],[point.medianH,'Empirischer Median','#f2c66b','dash']];
-      if(bins.length)markers.push([point.p05H,'P5 · empirisch','#a7c9ff','dot'],[point.p95H,'P95 · empirisch','#a7c9ff','dot']);
-      if(data.count>1)markers.push([point.minH,'Gemessenes Minimum','#87929d','dash'],[point.maxH,'Gemessenes Maximum','#87929d','dash']);
+      if(hasCurve)traces.push({x:distribution.density.map(p=>p.hours/display.factor),y:distribution.density.map(p=>p.densityPerH*display.factor*100),type:'scatter',mode:'lines',line:{color:'#6ea8fe',width:2.5,shape:'linear'},fill:'tozeroy',fillcolor:'rgba(110,168,254,.18)',name:'Unsicherheit der mittleren Laufzeit',hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<br>Dichte: %{y:.3f} % / ${display.label}<extra></extra>`});
+      if(hasCurve)shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.p05H/display.factor,x1:point.p95H/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.18)',line:{width:0},layer:'below'});
+      const markers=[[point.expectedH,'Laufzeitschätzung aus mittlerer Leistung','#65d98b','solid']];
+      if(hasCurve)markers.push([point.p05H,'P5 · Näherung','#a7c9ff','dot'],[point.p95H,'P95 · Näherung','#a7c9ff','dot']);
       for(const [hours,label,color,dash] of markers){
         if(!Number.isFinite(hours))continue;
-        shapes.push({type:'line',xref:'x',yref:'paper',x0:hours/display.factor,x1:hours/display.factor,y0:0,y1:1,line:{color,width:label.startsWith('Erwartete')?2:1,dash}});
+        shapes.push({type:'line',xref:'x',yref:'paper',x0:hours/display.factor,x1:hours/display.factor,y0:0,y1:1,line:{color,width:label.startsWith('Laufzeitschätzung')?3:1,dash}});
         traces.push({x:[hours/display.factor,hours/display.factor],y:[0,null],type:'scatter',mode:'lines',line:{color,width:2,dash},name:label,hoverinfo:'skip'});
         if(label.startsWith('P5')||label.startsWith('P95'))annotations.push({xref:'x',yref:'paper',x:hours/display.factor,y:.7,text:label.slice(0,3),showarrow:false,font:{color:'#a7c9ff',size:11}});
+        if(label.startsWith('Laufzeitschätzung'))annotations.push({xref:'x',yref:'paper',x:hours/display.factor,y:1,text:`Laufzeitschätzung: ${life(hours)}`,showarrow:true,ax:0,ay:-24,arrowcolor:color,font:{color,size:12},bgcolor:'#121820'});
       }
-      if(!bins.length&&Number.isFinite(point.expectedH))traces.push({x:[point.expectedH/display.factor],y:[100],type:'scatter',mode:'markers',marker:{color:'#65d98b',size:10},showlegend:false,hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<extra></extra>`});
-      const min=Math.min(point.minH,point.expectedH),max=Math.max(point.maxH,point.expectedH),padding=bins.length?0:Math.max(max*.01,1e-9);
-      if(!bins.length)annotations.push({xref:'paper',yref:'paper',x:.5,y:.85,text:distribution.reason,showarrow:false,font:{color:'#aeb8c2',size:11}});
+      if(!hasCurve&&Number.isFinite(point.expectedH))traces.push({x:[point.expectedH/display.factor],y:[100],type:'scatter',mode:'markers',marker:{color:'#65d98b',size:10},showlegend:false,hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<extra></extra>`});
+      const min=hasCurve?point.minH:point.expectedH,max=hasCurve?point.maxH:point.expectedH,padding=hasCurve?0:Math.max(max*.01,1e-9);
+      if(!hasCurve)annotations.push({xref:'paper',yref:'paper',x:.5,y:.85,text:distribution.reason,showarrow:false,font:{color:'#aeb8c2',size:11}});
       const compact=el('Chart').clientWidth>0&&el('Chart').clientWidth<500;
       const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:12},margin:{l:compact?66:82,r:24,t:compact?160:70,b:86},
         xaxis:{title:{text:`Batterielaufzeit [${display.label}]`,standoff:16},range:Number.isFinite(max)?[Math.max(0,min-padding)/display.factor,(max+padding)/display.factor]:undefined,type:'linear',gridcolor:'#252d35',zeroline:false},
-        yaxis:{title:{text:bins.length?`Verteilungsdichte [% / ${display.label}]`:'Szenarioanteil [%]',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
+        yaxis:{title:{text:hasCurve?`Unsicherheitsdichte [% / ${display.label}]`:'Laufzeitmarkierung',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
         annotations,legend:{orientation:'h',x:0,y:1.03,yanchor:'bottom',font:{size:10}},shapes,hovermode:'x unified'};
       renderChain=renderChain.catch(()=>{}).then(async()=>{
         if(token!==renderToken||state.view!=='battery')return;

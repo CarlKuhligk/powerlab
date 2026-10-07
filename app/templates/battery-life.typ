@@ -20,14 +20,13 @@
 Erstellt: #report.generated
 = Einstellung und Ergebnis
 #rows-table(report.setup + report.results)
-= Laufzeitverteilung für die gewählte Einstellung
+= Mittlere Laufzeit und ihre Unsicherheit
 #image("chart.png", width: 100%)
-Blau: gegl?ttete Sch?tzung der gewichteten Verteilungsdichte gemessener Verbrauchsszenarien.
-Grün: Laufzeit aus mittlerer Leistung. Goldene Linie: empirischer Median.
-Helle Fläche: beobachtetes Min/Max; dunklere Fläche: empirisches P5–P95-Intervall.
-Die x-Achse zeigt Laufzeit in automatisch gewählten Einheiten, die y-Achse Verteilungsdichte in Prozent pro Laufzeiteinheit.
-Die Fl?che unter der Kurve entspricht 100 %. Bei einer einzelnen Laufzeit wird eine Markierung gezeigt.
-Die Verteilung reicht nicht über die Min/Max-Grenzen der gemessenen Szenarien hinaus.
+Grün: Laufzeitschätzung aus mittlerer Leistung. Blau: angenäherte Unsicherheitsdichte.
+Schattierte Fläche: näherungsweises 90-%-Intervall (P5 bis P95).
+Die x-Achse zeigt Laufzeit, die y-Achse Dichte in Prozent pro Laufzeiteinheit.
+Die Kurve zeigt die Unsicherheit der Schätzung, keine Verteilung dauerhaft wiederholter Einzelzyklen.
+Bei null Streuung oder nicht schätzbarer Unsicherheit wird eine Markierung gezeigt.
 #pagebreak()
 = Übernommene Messstatistik
 Gewichtung: #report.weighting.
@@ -49,14 +48,10 @@ mindestens zwei gültige Zyklen sind erforderlich.
     headers: ("Kennwert", "Mittelwert", "Minimum", "Maximum", "Standardabw.", "Varianz"),
     columns: (1.5fr, 1fr, 1fr, 1fr, 1fr, 1fr))
 ]
-= Laufzeit-Perzentile für die gewählte Einstellung
-#rows-table(report.percentiles, headers: ("Perzentil", "Quantilniveau", "Gemessene Szenarien"), columns: (0.8fr, 0.7fr, 1.3fr))
-Die Spalte „Gemessene Szenarien“ beschreibt entsprechend den gewählten Messungsanteilen gewichtete
-Szenarien aus den beobachteten Sleep-/Wake-Paaren. Bei mehreren Messungen wird an
-den Mittelpunkten der kumulierten Gewichte linear interpoliert.
-Jedes Szenario nimmt an, dass sich der Verbrauch seines gemessenen Zyklus wiederholt.
-P10 ist das linear interpolierte 10-%-Perzentil dieser Szenariolaufzeiten.
-Min/Max sind die Grenzen der beobachteten Szenarien und keine garantierten Grenzen.
+= Unsicherheitsintervall der mittleren Laufzeit
+#rows-table(report.percentiles, headers: ("Perzentil", "Quantilniveau", "Näherung"), columns: (0.8fr, 0.7fr, 1.3fr))
+P5 und P95 begrenzen das näherungsweise 90-%-Intervall der mittleren Laufzeitschätzung.
+Sie sind keine garantierten Grenzen der tatsächlichen Batterielaufzeit.
 = Rechenmodell und Annahmen
 Wake-Energie und Wake-Dauer stammen aus der Messung. Die Sleep-Energie wird über die
 gemessene Sleep-Leistung proportional zur gewählten Sleep-Dauer skaliert.
@@ -69,14 +64,18 @@ Laufzeit = nutzbare Batterieenergie / mittlere Leistung.
 
 Die Batterieenergie ist die an der Messspannung nutzbare Energie. Selbstentladung,
 Alterung und Änderungen des Gerätezustands sind nicht modelliert.
-Das Szenarioband ist kein Konfidenzintervall und keine kalibrierte Wahrscheinlichkeit
-der tatsächlichen Batterielaufzeit. Bei nur einem gültigen Zyklus ist keine Streuungsauswertung möglich.
-Die Kurve verwendet eine gewichtete Kerndichtesch?tzung mit Randspiegelung und
-Normierung innerhalb der gemessenen Min/Max-Grenzen. Die Gl?ttung h?ngt von der
-Streuung und der effektiven Stichprobengr??e ab. Besonders bei wenigen Zyklen
-h?ngt die Kurvenform stark von der Gl?ttung ab. Es wird keine Normalverteilung
-der Laufzeiten vorausgesetzt. P5–P95 sind interpolierte empirische Perzentile; bei wenigen Szenarien
-enthält dieses Intervall nicht zwingend genau 90 % des Gewichts.
-Die Achse skaliert automatisch. Kapazitätsänderungen verschieben die Laufzeitwerte,
-können aber eine ähnliche Kurvenform ergeben. Bei langen Sleep-Dauern dominiert die Sleep-Leistung.
-Bei null Streuung oder weniger als zwei gültigen Zyklen wird eine Laufzeitmarkierung gezeigt.
+Die Unsicherheit wird durch lineare Fortpflanzung auf der logarithmischen Laufzeitskala
+berechnet (Delta-Methode mit Kovarianzen). Die Kurve verwendet eine lognormale Näherung,
+deren Median die Laufzeitschätzung aus mittlerer Leistung ist; sie ist keine empirische
+Häufigkeitsverteilung. Der Chart zeigt den Bereich von minus vier bis plus vier
+Standardunsicherheiten auf der logarithmischen Skala, keine harten Laufzeitgrenzen.
+Die Mittelwertunsicherheit wird je Messung aus der Stichprobenvarianz geteilt durch
+die Zyklusanzahl bestimmt und mit dem Quadrat des Messungsanteils kombiniert.
+Sleep-Leistung ist ein Verhältnis aus gemessener Sleep-Energie und Sleep-Dauer;
+deren Kovarianzen und die Zusammenhänge mit Wake-Energie und Wake-Dauer bleiben erhalten.
+Unabhängige, repräsentative Zyklen und unabhängige Messungen werden vorausgesetzt.
+Mindestens zwei gültige Zyklen je Messung mit positivem Einfluss sind erforderlich.
+Bei wenigen Zyklen oder großer Streuung ist die Näherung eingeschränkt.
+Messungsanteile, Batterieenergie und Timing gelten als fest. Zeitliche Abhängigkeiten,
+systematische Messfehler und Batterieunsicherheit sind nicht enthalten.
+Das Intervall ist keine garantierte Laufzeitprognose.

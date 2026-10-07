@@ -68,7 +68,7 @@ test('calculator plots bounded measurement shares including 24 hour sleep',async
   assert.equal(h.plots.at(-1).traces.filter(t=>t.type==='bar').length,0);
   assert.equal(h.plots.at(-1).traces[0].mode,'lines');
   assert.equal(h.plots.at(-1).traces[0].fill,'tozeroy');
-  assert.equal(h.plots.at(-1).layout.shapes.filter(s=>s.type==='rect').length,2);
+  assert.equal(h.plots.at(-1).layout.shapes.filter(s=>s.type==='rect').length,1);
   assert.match(h.el('StatisticsRows').innerHTML,/Varianz|µWh²/);
   assert.match(h.el('PercentileRows').innerHTML,/P95/);
   const seconds=Number(h.el('Value').value);
@@ -80,9 +80,14 @@ test('calculator plots bounded measurement shares including 24 hour sleep',async
   assert.equal(h.el('Export').disabled,false);
   assert.match(plot.layout.xaxis.title.text,/Jahre/);
   const point=h.model.evaluate(h.model.combine([{id:'chosen',summary:summary()}]),1,'sleep',86400);
-  close(plot.layout.xaxis.range[0],Math.min(point.minH,point.expectedH)/8760);
-  close(plot.layout.xaxis.range[1],Math.max(point.maxH,point.expectedH)/8760);
-  close(histogram.x.slice(1).reduce((area,x,i)=>area+(x-histogram.x[i])*(histogram.y[i]+histogram.y[i+1])/2,0),100);
+  const u=h.model.uncertainty(h.model.combine([{id:'chosen',summary:summary()}]),1,'sleep',86400);
+  close(plot.traces.find(t=>t.name==='Laufzeitschätzung aus mittlerer Leistung').x[0],point.expectedH/8760);
+  assert.ok(plot.layout.annotations.some(a=>a.text.startsWith('Laufzeitschätzung:')));
+  assert.ok(!plot.traces.some(t=>t.name==='Empirischer Median'||t.name==='Gemessenes Minimum'));
+  close(plot.layout.xaxis.range[0],u.point.minH/8760);
+  close(plot.layout.xaxis.range[1],u.point.maxH/8760);
+  const area=histogram.x.slice(1).reduce((area,x,i)=>area+(x-histogram.x[i])*(histogram.y[i]+histogram.y[i+1])/2,0);
+  assert.ok(Math.abs(area-100)<.05);
   assert.match(plot.layout.yaxis.title.text,/%/);
   assert.match(h.el('Band').textContent,/bis/);
   h.el('Energy').value='0';h.el('Energy').listeners.input();await h.flush();
@@ -95,7 +100,8 @@ test('calculator plots bounded measurement shares including 24 hour sleep',async
 test('distribution preserves measured scatter and has no extrapolated tails',()=>{
   const {model}=harness(),data=model.profile(summary());
   const result=model.distribution(data,1,'sleep',86400);
-  close(result.meanH,result.point.expectedH);
+  close(result.meanH,result.point.scenariosH.reduce((a,b)=>a+b,0)/data.count);
+  assert.notEqual(result.meanH,result.point.expectedH);
   close(result.stddevH,Math.abs(result.point.maxH-result.point.minH)/Math.sqrt(2));
   close(result.bins[0].leftH,result.point.minH);
   close(result.bins.at(-1).rightH,result.point.maxH);
@@ -117,6 +123,22 @@ test('distribution preserves measured scatter and has no extrapolated tails',()=
   const identical=summary();identical.valid_wake_phases[1]={...identical.valid_wake_phases[0],sequence:2};identical.valid_sleep_phases[1]={...identical.valid_sleep_phases[0],following_wake_sequence:2};
   const zero=model.distribution(model.profile(identical),1,'sleep',86400);
   assert.equal(zero.stddevH,0);assert.equal(zero.bins.length,0);
+});
+
+test('uncertainty chart does not invent an interval for a single cycle',async()=>{
+  const h=harness();h.ui.install();
+  const opening=h.ui.open('chosen');
+  h.requests[0].resolve([{id:'chosen',name:'Chosen',status:'completed'}]);
+  await new Promise(r=>setImmediate(r));
+  const one=summary();one.valid_wake_phases=one.valid_wake_phases.slice(0,1);one.valid_sleep_phases=one.valid_sleep_phases.slice(0,1);
+  h.requests[1].resolve(one);await opening;await h.flush();
+  assert.equal(h.el('Band').textContent,'Nicht schätzbar');
+  assert.match(h.el('DistributionNote').textContent,/mindestens zwei gültige Zyklen je Messung/);
+  assert.ok(!h.plots.at(-1).traces.some(t=>t.fill==='tozeroy'));
+  assert.ok(h.plots.at(-1).traces.some(t=>t.mode==='markers'));
+  const d=h.model.profile({...summary(),valid_wake_phases:[{sequence:1,duration_s:1,energy_uwh:1},{sequence:2,duration_s:1,energy_uwh:1}],valid_sleep_phases:[{following_wake_sequence:1,duration_s:9,energy_uwh:.09},{following_wake_sequence:2,duration_s:9,energy_uwh:.09}]});
+  const u=h.model.uncertainty(d,1,'sleep',60);
+  assert.equal(u.available,true);assert.equal(u.standardErrorH,0);assert.equal(u.density.length,0);
 });
 
 test('late source responses cannot replace the currently selected measurement',async()=>{

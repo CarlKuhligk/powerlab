@@ -19,7 +19,8 @@ for(const c of cases){
   const d=context.model.distribution(data,c.energy_wh,c.mode,c.value),p=d.point;
   for(const [a,b] of [['expectedH','expected_h'],['powerUw','power_uw'],['sleepS','sleep_s'],['dutyPct','duty_pct'],['scenariosH','scenarios_h']])close(p[a],e[b],`${c.name}.${a}`);
   for(const [a,b] of [['minH','0'],['p05H','5'],['lowH','10'],['medianH','50'],['highH','90'],['p95H','95'],['maxH','100']])close(p[a],e.percentiles[b],`${c.name}.${a}`);
-  for(const [a,b] of [['meanH','mean_h'],['stddevH','stddev_h'],['varianceH2','variance_h2'],['bins','bins']])close(d[a],e[b],`${c.name}.${a}`);
+  close(d.meanH,e.scenarios_h.reduce((sum,h,i)=>sum+h*data.weights[i],0),`${c.name}.scenario-mean`);
+  for(const [a,b] of [['stddevH','stddev_h'],['varianceH2','variance_h2'],['bins','bins']])close(d[a],e[b],`${c.name}.${a}`);
   if(c.name.startsWith('constant')||c.name.startsWith('single')){
     if(d.bins.length)throw Error(`${c.name}: fabricated spread for constant/single cycle`);
   }else{

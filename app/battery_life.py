@@ -64,6 +64,7 @@ def combine(sources, weighting='mean'):
             samples.extend(data['samples'])
             weights.extend([share / data['count']] * data['count'])
     return {'samples': samples, 'weights': weights, 'count': len(samples), 'sources': details,
+            'groups': [{'data': d, 'share': w / total} for _, d, w in prepared if w > 0],
             'weighting': weighting, 'active_measurement_count': sum(d['share'] > 0 for d in details),
             'wake_s': sum(d['wake_s'] * w / total for _, d, w in prepared),
             'wake_energy_uwh': sum(d['wake_energy_uwh'] * w / total for _, d, w in prepared),
@@ -114,6 +115,54 @@ def evaluate(data, energy_wh, mode, value):
             'percentiles': {str(p): (weighted_percentile(scenarios, data['weights'], p / 100)
                                      if 'weights' in data else percentile(scenarios, p / 100))
                             for p in [0, 5, 10, 50, 90, 95, 100]}}
+
+
+def uncertainty(data, energy_wh, mode, value):
+    """Delta-method uncertainty of log(runtime), stratified by measurement.
+
+    Cycles and measurements are assumed independent; paired sleep/wake
+    covariance and the duration-weighted sleep-power ratio are retained.
+    Battery energy, timing and measurement shares are treated as fixed.
+    """
+    point = evaluate(data, energy_wh, mode, value)
+    center = point['expected_h']
+    groups = data.get('groups', [{'data': data, 'share': 1}])
+    result = {'center_h': center, 'standard_error_h': None, 'log_variance': None,
+              'available': False, 'percentiles_h': {}, 'reason': ''}
+    if not math.isfinite(center):
+        result['reason'] = 'Kein mittlerer Verbrauch: keine endliche Laufzeitschätzung.'
+        return result
+    if any(g['data']['count'] < 2 for g in groups):
+        result['reason'] = 'Mindestens zwei gültige Zyklen je Messung mit positivem Einfluss erforderlich.'
+        return result
+    t = point['sleep_s']
+    numerator = 3600 * data['wake_energy_uwh'] + data['sleep_power_uw'] * t
+    gw, gs = -3600 / numerator, -t / numerator
+    gd = (1 / (data['wake_s'] + t) if mode == 'sleep' else
+          1 / data['wake_s'] - data['sleep_power_uw'] * (100 / value - 1) / numerator)
+    log_variance = 0
+    for group in groups:
+        d = group['data']
+        mean_sleep = mean(s['sleep_s'] for s in d['samples'])
+        influences = [gw * (s['wake_energy_uwh'] - d['wake_energy_uwh']) +
+                      gd * (s['wake_s'] - d['wake_s']) +
+                      gs * (s['sleep_energy_uwh'] * 3600 - d['sleep_power_uw'] * s['sleep_s']) / mean_sleep
+                      for s in d['samples']]
+        log_variance += group['share']**2 * variance(influences) / d['count']
+    sigma = math.sqrt(max(0, log_variance))
+    z = {5: -1.6448536269514722, 10: -1.2815515655446004, 50: 0,
+         90: 1.2815515655446004, 95: 1.6448536269514722}
+    try:
+        percentiles = {str(p): center * math.exp(v * sigma) for p, v in z.items()}
+        chart_max = center * math.exp(4 * sigma)
+    except OverflowError:
+        chart_max = math.inf
+    if not math.isfinite(chart_max):
+        result['reason'] = 'Unsicherheit zu groß für eine endliche Näherung.'
+        return result
+    result.update(available=True, standard_error_h=center * sigma,
+                  log_variance=log_variance, percentiles_h=percentiles)
+    return result
 
 
 def normal_approximation(data, energy_wh, mode, value):

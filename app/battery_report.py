@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .battery_life import combine, evaluate, measured_statistics, weighted_statistics, profile
+from .battery_life import combine, evaluate, measured_statistics, uncertainty, profile
 from .report import date, number
 
 TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
@@ -17,9 +17,7 @@ TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
 def report_data(measurement, summary, request, combined=None):
     data = combined if combined is not None else profile(summary)
     point = evaluate(data, request.energy_wh, request.mode, request.value)
-    finite_scenarios = all(math.isfinite(v) for v in point['scenarios_h'])
-    scatter = (weighted_statistics(point['scenarios_h'], data.get('weights', [1/data['count']]*data['count']))
-               if finite_scenarios else {'stddev': None, 'variance': None})
+    estimate = uncertainty(data, request.energy_wh, request.mode, request.value)
     statistics = data['statistics'] if combined is not None else measured_statistics(summary)
     def lifetime(hours):
         if not math.isfinite(hours):
@@ -44,23 +42,18 @@ def report_data(measurement, summary, request, combined=None):
                   ['Gewählte Sleep-Dauer', number(point['sleep_s'], 's', 6)],
                   ['Gemessene mittlere Wake-Dauer', number(data['wake_s'], 's', 6)],
                   ['Wake-Duty-Cycle', number(point['duty_pct'], '%', 6)]],
-        'results': [['Erwartete Laufzeit', lifetime(point['expected_h'])],
-                    ['Erwartete Leistung', number(point['power_uw'], 'µW', 6)],
-                    ['Standardabweichung der Szenario-Laufzeiten', lifetime(scatter['stddev']) if scatter['stddev'] is not None else '—'],
-                    ['Varianz der Szenario-Laufzeiten', number(scatter['variance']/576 if scatter['variance'] is not None else None, 'd²', 9)],
-                    ['Empirische untere Grenze P5', lifetime(point['percentiles']['5']) if data['count'] > 1 else 'Ab zwei gültigen Zyklen'],
-                    ['Empirische obere Grenze P95', lifetime(point['percentiles']['95']) if data['count'] > 1 else 'Ab zwei gültigen Zyklen'],
-                    ['Kürzeste gemessene Szenario-Laufzeit', lifetime(point['percentiles']['0'])],
-                    ['Längste gemessene Szenario-Laufzeit', lifetime(point['percentiles']['100'])]],
+        'results': [['Laufzeitschätzung aus mittlerer Leistung', lifetime(point['expected_h'])],
+                    ['Mittlere Leistung', number(point['power_uw'], 'µW', 6)],
+                    ['Standardunsicherheit der Laufzeitschätzung', lifetime(estimate['standard_error_h']) if estimate['available'] else 'Nicht schätzbar'],
+                    ['Untere 90-%-Grenze · P5 (Näherung)', lifetime(estimate['percentiles_h']['5']) if estimate['available'] else 'Nicht schätzbar'],
+                    ['Obere 90-%-Grenze · P95 (Näherung)', lifetime(estimate['percentiles_h']['95']) if estimate['available'] else 'Nicht schätzbar']],
         'statistics': [[label] + [number(statistics[key].get(field), unit + ('²' if field == 'variance' else ''), 6)
                                    for field in ['mean', 'min', 'max', 'stddev', 'variance']]
                        for label, key, unit in [('Wake-Energie', 'wake_energy', 'µWh'),
                                                  ('Sleep-Energie · gemessen', 'sleep_energy', 'µWh'),
                                                  ('Sleep-Leistung · normiert', 'sleep_power', 'µW')]],
-        'percentiles': [[('Minimum' if p == 0 else 'Maximum' if p == 100 else 'Median · P50' if p == 50 else f'P{p}'),
-                         f'{p} %',
-                         lifetime(value) if data['count'] > 1 or p == 50 else 'Ab zwei gültigen Zyklen']
-                        for key, value in point['percentiles'].items() for p in [int(key)]],
+        'percentiles': [[f'P{p} · Näherung', f'{p} %', lifetime(estimate['percentiles_h'][str(p)]) if estimate['available'] else 'Nicht schätzbar']
+                        for p in [5, 10, 50, 90, 95]],
     }
 
 

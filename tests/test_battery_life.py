@@ -133,8 +133,9 @@ def test_battery_pdf_contains_recomputed_statistics_and_percentile_table(tmp_pat
         measurement = {'id':'battery-test', 'name':'Test #panic("never source")', 'cycle_energy':summary()}
         monkeypatch.setattr(client.app.state.manager, 'get_measurement', lambda mid: measurement)
         data = report_data(measurement, summary(), BatteryReportRequest(**body))
-        assert len(data['statistics']) == 3 and len(data['percentiles']) == 7
-        assert data['percentiles'][3][:2] == ['Median · P50', '50 %']
+        assert len(data['statistics']) == 3 and len(data['percentiles']) == 5
+        assert data['percentiles'][2][:2] == ['P50 · Näherung', '50 %']
+        assert data['results'][0][0] == 'Laufzeitschätzung aus mittlerer Leistung'
         response = client.post('/api/measurements/battery-test/battery-report', json=body)
         assert response.status_code == 200, response.text
         assert response.content.startswith(b'%PDF-')

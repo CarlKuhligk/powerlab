@@ -81,9 +81,10 @@
           <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
         </div>
         <div class="card chart-card battery-chart-card">
-          <div class="card-title-row"><div><h3>Laufzeitverteilung für deine Einstellung</h3><p>Gegl?ttete Messszenarien innerhalb ihrer Min/Max-Grenzen</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
-          <div class="battery-result-grid"><div><span>Laufzeit aus mittlerer Leistung</span><strong id="batteryRuntime">—</strong></div><div><span>Empirische Perzentile · P5–P95</span><strong id="batteryBand">—</strong></div><div><span>Erwartete Leistung</span><strong id="batteryPower">—</strong></div></div>
-          <div id="batteryChart" class="chart large-chart" aria-label="Gegl?ttete Laufzeitverteilung gemessener Szenarien mit Min/Max und Perzentilen"></div>
+          <div class="card-title-row"><div><h3>Mittlere Laufzeit und ihre Unsicherheit</h3><p>Gemessene Sleep-/Wake-Streuung bei deiner festen Timing-Einstellung</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
+          <div class="battery-result-grid"><div><span>Geschätzte mittlere Laufzeit</span><strong id="batteryRuntime">—</strong></div><div><span>90-%-Unsicherheitsintervall · Näherung</span><strong id="batteryBand">—</strong></div><div><span>Mittlere Leistung</span><strong id="batteryPower">—</strong></div></div>
+          <p class="form-hint">Grüne Linie: Laufzeitschätzung aus mittlerer Leistung. Blaue Kurve: angenäherte Unsicherheit dieser Schätzung. Schattierter Bereich: näherungsweises 90-%-Intervall. Deine Sleep-Dauer bleibt fest; die gemessene Sleep-Leistung und Wake-Werte bestimmen die Streuung der Schätzung.</p>
+          <div id="batteryChart" class="chart large-chart" aria-label="Unsicherheit der mittleren Laufzeit mit näherungsweisem 90-Prozent-Intervall"></div>
           <p id="batteryDistributionNote" class="form-hint"></p>
           <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
         </div>
@@ -93,9 +94,9 @@
         <div class="event-scroll"><table><thead><tr><th>Kennwert</th><th>Mittelwert</th><th>Minimum</th><th>Maximum</th><th>Standardabweichung</th><th>Varianz</th></tr></thead><tbody id="batteryStatisticsRows"></tbody></table></div>
       </div>
       <div class="card table-card">
-        <div class="card-title-row"><div><h3>Laufzeit-Perzentile für deine Einstellung</h3><p>Jeder beobachtete Zyklus bildet ein Szenario, als würde sich sein Verbrauch wiederholen. Szenarien werden nach dem gewählten Messungseinfluss gewichtet; Perzentile werden an den Mittelpunkten der kumulierten Gewichte linear interpoliert. Min/Max umfassen nur Messungen mit positivem Einfluss.</p></div></div>
-        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Gemessene Szenarien</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
-        <p class="form-hint battery-assumptions">Die Balken zeigen gewichtete Anteile der gemessenen Verbrauchsszenarien, ohne Normalannahme oder Ausläufer außerhalb ihrer Grenzen. P5–P95 sind interpolierte empirische Perzentile; bei wenigen Szenarien enthalten sie nicht zwingend exakt 90 % des Gewichts und sind keine garantierte Laufzeitprognose. Jeder Zyklus wird als wiederholter Verbrauch angenommen. Laufzeit aus mittlerer Leistung und Szenario-Median können abweichen. Die Wake-Energie und Wake-Dauer entsprechen der Messung; Sleep-Energie skaliert mit der geplanten Sleep-Dauer. Batterieenergie bedeutet die an der Messspannung nutzbare Energie. Selbstentladung, Alterung und Änderungen des Gerätezustands sind nicht modelliert.</p>
+        <div class="card-title-row"><div><h3>Unsicherheitsintervall der mittleren Laufzeit</h3><p>Die Grenzen werden durch Unsicherheitsfortpflanzung aus den gemessenen Mittelwerten und ihren Kovarianzen geschätzt. Sie sind keine garantierten Grenzen der tatsächlichen Batterielaufzeit.</p></div></div>
+        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Laufzeitschätzung</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
+        <p class="form-hint battery-assumptions">Die Kurve ist eine Näherung für die statistische Unsicherheit der mittleren Laufzeit. Vorausgesetzt werden unabhängige, repräsentative Zyklen und unabhängige Messungen; die gewählten Messungsanteile sind fest. Die Kovarianzen innerhalb eines Sleep-/Wake-Paars werden berücksichtigt. Die Sleep-Leistung wird nach gemessener Sleep-Dauer gewichtet und auf deine gewählte Dauer angewendet. Mindestens zwei Zyklen je berücksichtigter Messung sind erforderlich. Bei wenigen Zyklen oder großer relativer Unsicherheit ist die Näherung eingeschränkt. Zeitliche Abhängigkeiten, systematische Fehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen werden nicht modelliert.</p>
       </div>
     </section>
 
@@ -355,6 +356,6 @@
 <script src="/static/cycle-energy.js?v=1.0.6-wake-variance"></script>
 <script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/battery-life.js?v=1.0.6-battery-density"></script>
+<script src="/static/battery-life.js?v=1.0.6-battery-uncertainty"></script>
 <script src="/static/app.js?v=1.0.6-battery-life"></script>
 </body></html>
