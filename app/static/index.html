@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e1115">
+  <title>PowerLab</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-preview-ui">
+  <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div><strong>PowerLab</strong><span>v1.0.6</span></div>
+    </div>
+    <nav>
+      <button class="nav active" data-view="live">◉ <span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
+      <button class="nav" data-view="measurements">▤ <span>Messungen</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="status-line"><i class="ok"></i><span>SQLite + Parquet</span></div>
+      <a href="/docs" target="_blank">API-Dokumentation ↗</a>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><h1 id="pageTitle">Aktiv</h1><p id="pageSubtitle">Laufende und geplante PPK2-Messungen</p></div>
+      <div class="top-actions"><button class="primary" id="newMeasurementBtn">+ Neue Messung</button></div>
+    </header>
+
+    <section id="liveView" class="view active">
+      <div class="summary-grid">
+        <div class="summary-card"><span>Läuft</span><strong id="runningCount">0</strong></div>
+        <div class="summary-card"><span>Geplant</span><strong id="scheduledCount">0</strong></div>
+        <div class="summary-card"><span>PPK2 erkannt</span><strong id="deviceCount">0</strong></div>
+      </div>
+      <div id="liveEmpty" class="hero-card">
+        <div><span class="eyebrow">BEREIT</span><h2>Keine aktive oder geplante Messung</h2><p>Lege eine Messung für sofort oder für einen späteren Zeitpunkt an. Dauer oder fester Endzeitpunkt können automatisch gesteuert werden.</p></div>
+        <button class="primary large" id="idleStartBtn">Messung anlegen</button>
+      </div>
+      <div id="liveLists" class="live-lists hidden">
+        <section>
+          <div class="section-title"><div><h2>Laufende Messungen</h2><p>Nur Statusübersicht – Details und Chart öffnen sich in der Messung.</p></div></div>
+          <div id="runningCards" class="session-grid"></div>
+          <div id="noRunning" class="empty-inline">Keine laufende Messung.</div>
+        </section>
+        <section>
+          <div class="section-title"><div><h2>Geplante Messungen</h2><p>Ausstehende Sessions können bis zum Start angepasst werden.</p></div></div>
+          <div id="scheduledCards" class="session-grid"></div>
+          <div id="noScheduled" class="empty-inline">Keine Messung geplant.</div>
+        </section>
+      </div>
+    </section>
+
+    <section id="sessionView" class="view">
+      <div class="detail-toolbar">
+        <button class="secondary" id="backToLive">← Aktiv</button><div class="spacer"></div>
+        <button class="secondary hidden" id="editScheduledBtn">✎ Planung bearbeiten</button>
+        <button class="danger hidden" id="sessionStopBtn">■ Stop</button>
+        <button class="danger ghost hidden" id="cancelScheduledBtn">Planung abbrechen</button>
+      </div>
+      <div class="detail-title card">
+        <div><span class="eyebrow" id="sessionStatus">—</span><h2 id="sessionName">—</h2><p id="sessionMeta">—</p></div>
+        <div class="detail-time"><strong id="sessionTimeMain">—</strong><span id="sessionTimeSub">—</span></div>
+      </div>
+      <div class="setup-grid card" id="sessionSetup"></div>
+
+      <div id="sessionLiveArea" class="hidden">
+        <div class="kpi-grid detail-kpis">
+          <div class="kpi"><span>Current</span><strong id="kpiCurrent">—</strong><small>letztes Sample</small></div>
+          <div class="kpi"><span>Sleep baseline</span><strong id="kpiSleep">—</strong><small id="kpiThreshold">Threshold —</small></div>
+          <div class="kpi"><span>Peak</span><strong id="kpiPeak">—</strong><small>seit Start</small></div>
+          <div class="kpi"><span>Wake events</span><strong id="kpiWake">0</strong><small id="kpiBackground"></small><small>automatisch erkannt</small></div>
+          <div class="kpi"><span>Charge</span><strong id="kpiCharge">—</strong><small>integriert</small></div>
+          <div class="kpi"><span>Energy</span><strong id="kpiEnergy">—</strong><small>bei Messspannung</small></div>
+        </div>
+        <div class="card chart-card">
+          <div class="card-title-row">
+            <div><h3>Live-Stromverlauf</h3><p id="liveChartSubtitle">Mittelwerte + Min/Max-Bereich · Zoom zeigt Details</p></div>
+            <div class="chart-actions"><button class="secondary compact" id="liveFollowBtn">● Live folgen</button><div class="segmented"><button class="active" data-live-scale="log">Log</button><button data-live-scale="linear">Linear</button></div></div>
+          </div>
+          <div id="liveChart" class="chart"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="card-title-row">
+            <div><h3>Live-Spektrogramm</h3><p>Frequenzanteile der Stromschwankungen · ergänzt die Zustandsanalyse</p></div>
+            <label class="spectrogram-toggle"><input type="checkbox" id="spectrogramToggle"> Anzeigen</label>
+          </div>
+          <div id="spectrogramPanel" class="hidden">
+            <p id="spectrogramHint">Warte auf Messdaten …</p>
+            <div id="spectrogramChart" class="chart"></div>
+          </div>
+        </div>
+      </div>
+      <div id="sessionPendingInfo" class="card pending-info hidden"></div>
+    </section>
+
+    <section id="measurementsView" class="view">
+      <div class="toolbar card"><input id="historySearch" type="search" placeholder="Messungen durchsuchen …"><button class="secondary" id="refreshMeasurements">↻ Aktualisieren</button></div>
+      <div class="toolbar card measurement-bulk-toolbar">
+        <span id="measurementSelectionCount" aria-live="polite">0 ausgewählt</span>
+        <button class="secondary" id="clearMeasurementSelection" disabled>Auswahl aufheben</button>
+        <div class="spacer"></div>
+        <select id="bulkExportKind" aria-label="Exportformat"><option value="pdf">Messprotokolle (PDF im ZIP)</option><option value="bundle">Komplett mit Rohdaten (ZIP)</option><option value="csv">Übersicht (CSV)</option><option value="json">Metadaten (JSON)</option></select>
+        <button class="secondary" id="exportSelectedMeasurements" disabled>Auswahl exportieren</button>
+        <button class="danger" id="deleteSelectedMeasurements" disabled>Auswahl löschen</button>
+      </div>
+      <div class="card table-card">
+        <table><thead><tr><th class="measurement-select-cell"><input id="selectAllMeasurements" type="checkbox" aria-label="Alle sichtbaren Messungen auswählen"></th><th>Datum</th><th>Name</th><th>Projekt / Device</th><th>Firmware</th><th>Dauer</th><th>Sleep</th><th>Events</th><th>Status</th></tr></thead><tbody id="measurementRows"></tbody></table>
+        <div id="emptyMeasurements" class="empty hidden">Noch keine abgeschlossenen Messungen vorhanden.</div>
+      </div>
+    </section>
+
+    <section id="detailView" class="view">
+      <div class="detail-toolbar"><button class="secondary" id="backToMeasurements">← Messungen</button><div class="spacer"></div><button class="secondary" id="editMeasurement">✎ Bearbeiten</button><div class="dropdown"><button class="secondary" id="exportBtn">⇩ Export</button><div class="dropdown-menu"><a id="exportPdf">Messprotokoll (PDF)</a><a id="exportJson">JSON Metadaten</a><a id="exportCsv">CSV Übersicht</a><a id="exportBundle">PowerLab Bundle (.zip)</a></div></div><button class="danger ghost" id="deleteMeasurement">Löschen</button></div>
+      <div class="detail-title card">
+        <div class="detail-heading"><div><span class="status-badge" id="detailStatus">Abgeschlossen</span><h2 id="detailName">—</h2><p id="detailMeta">—</p></div><div class="detail-time"><span>Messdauer</span><strong id="detailDuration">—</strong><span id="detailStarted">—</span></div></div>
+        <p id="detailError" class="event-load-error hidden" role="alert"></p>
+        <section id="detailDetectionSection" class="detail-detection-section hidden" aria-labelledby="detailDetectionTitle"><h3 id="detailDetectionTitle">Erkennung &amp; Referenz</h3><div id="detailDetection" class="detection-metadata"></div></section>
+      </div>
+      <div class="detail-metric-groups" aria-label="Messkennzahlen">
+        <section class="card metric-group detail-current"><h3>Strom</h3><dl><div class="detail-sleep"><dt>Ø Sleep-Strom</dt><dd id="detailSleep">—</dd></div><div class="detail-wake"><dt>Ø Wake-Strom</dt><dd id="detailWakeCurrent">—</dd></div></dl></section>
+        <section class="card metric-group detail-timing"><h3>Timing</h3><dl><div><dt>Ø Periodendauer</dt><dd id="detailPeriod">—</dd></div><div class="detail-wake"><dt>Ø Wake-Dauer</dt><dd id="detailWakeDuration">—</dd></div></dl></section>
+        <section class="card metric-group detail-neutral"><h3>Aktivität</h3><dl><div class="detail-wake"><dt>Wake-Ereignisse</dt><dd id="detailWake">—</dd></div><div class="detail-wake"><dt>Wake-Zeitanteil</dt><dd id="detailDuty">—</dd></div></dl></section>
+        <section class="card metric-group detail-energy"><h3>Verbrauch</h3><dl><div><dt>Gesamtladung</dt><dd id="detailCharge">—</dd></div><div><dt>Gesamtenergie</dt><dd id="detailEnergy">—</dd></div></dl></section>
+      </div>
+      <div id="historyOverviewCard" class="card chart-card detail-protocol-card"><div class="card-title-row"><div><h3 id="historyOverviewTitle">Sleep / Wake-Verlauf</h3><p id="historyOverviewSubtitle">Exakte Zustandswechsel auf der Messzeitachse</p></div><div class="detail-state-legend"><span class="detail-sleep">Sleep</span><span class="detail-wake">Wake</span></div></div><div id="historyOverviewChart" class="chart large-chart"></div></div>
+      <div id="wakeEventCard" class="card chart-card hidden"><div class="card-title-row"><div><h3 id="wakeEventTitle">Wake Event</h3><p id="wakeEventSubtitle">100-kS/s-Rohdaten</p></div><div class="event-chart-actions"><button class="secondary" id="backToOverview">← Zustandsübersicht</button><div class="segmented" id="historyScaleControls"><button class="active" data-history-scale="log">Log</button><button data-history-scale="linear">Linear</button></div><label class="smoothing-control" title="Maximale Zahl angezeigter Punkte. Beim Hineinzoomen werden feinere Daten bis zu allen Rohsamples nachgeladen."><span>Punkte / Ansicht</span><input id="eventPointBudget" type="number" min="100" max="50000" step="100" value="25000" aria-label="Maximale Punkte pro Ansicht" style="width:100px"></label><label class="smoothing-control" title="Adaptive Gl?ttung reduziert Rauschen und erh?lt starke Spr?nge. Nur die Darstellung wird ver?ndert."><span>Gl?ttung</span><select id="historySmoothing" aria-label="Gl?ttung des Stromverlaufs"><option value="off">Aus</option><option value="light">Leicht</option><option value="medium">Mittel</option><option value="strong">Stark</option></select></label></div></div><div id="wakeEventStatus" class="event-loading hidden" role="status"></div><div id="wakeEventChart" class="chart large-chart"></div></div>
+      <div class="card table-card wake-event-table-card"><div class="card-title-row"><div><h3>Ereignisprotokoll <span class="event-count" id="wakeEventCount">0</span></h3><p>Ereignis auswählen, um Stromverlauf und Rohdaten zu öffnen.</p></div></div><div class="event-scroll"><table><thead><tr><th scope="col">Ereignis</th><th scope="col">Zeitpunkt</th><th scope="col">Periode</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Spitzenstrom</th><th scope="col">Ladung</th><th scope="col">D0–D7</th></tr></thead><tbody id="eventRows"></tbody></table></div></div>
+      <div class="card metadata-card history-metadata-card"><h3>Messkontext</h3><div id="metadataList" class="detail-context-grid"></div><details id="ppkConfigDetails" class="hidden config-details"><summary>PPK2 Geräte- und Kalibrierkonfiguration</summary><pre id="ppkConfigJson"></pre></details></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="measurementDialog" aria-labelledby="measurementDialogTitle">
+  <form id="measurementForm" method="dialog">
+    <div class="dialog-head"><div><span class="eyebrow" id="measurementDialogEyebrow">NEW SESSION</span><h2 id="measurementDialogTitle">Messung anlegen</h2></div><button type="button" class="icon-btn" data-close-dialog aria-label="Dialog schließen">×</button></div>
+    <fieldset class="measurement-basics"><legend><span class="section-number" aria-hidden="true">1</span> Messung &amp; Gerät</legend><div class="form-grid">
+      <label class="wide">Name<input name="name" id="measurementName" maxlength="160" required value="ULP Sleep / Wake Test"></label>
+      <label>Projekt<input name="project" value="ULP Application"></label><label>Device<input name="device" value="Prototype #1"></label>
+      <label>Firmware<input name="firmware" value="dev"></label>
+    </div><div class="form-grid hardware-settings">
+      <label>PPK2 auswählen<select name="port" id="portSelect" required></select></label>
+      <label>Modus<select name="meter_mode"><option value="source">Source meter</option><option value="ampere">Ampere meter</option></select></label>
+      <label>Spannung [mV]<input name="voltage_mv" type="number" min="800" max="5000" value="3300"></label>
+      <label class="wide">Notiz<textarea name="notes" rows="2" placeholder="Testbedingung, Build, Besonderheiten …"></textarea></label>
+    </div>
+    </fieldset>
+    <fieldset class="schedule-box"><legend><span class="section-number" aria-hidden="true">2</span> Zeitplanung</legend>
+      <div class="schedule-layout">
+        <div class="schedule-row">
+          <div class="schedule-mode">
+          <label for="startMode">Start</label>
+          <select name="start_mode" id="startMode"><option value="now">Sofort</option><option value="scheduled">Zeitpunkt</option></select>
+          </div>
+          <div class="schedule-details">
+        <label id="startAtLabel" class="schedule-conditional" hidden>Startzeit
+          <input name="scheduled_start_at" id="scheduledStartAt" type="datetime-local" step="1">
+        </label>
+        <p id="scheduleStartHint" class="schedule-hint">Die Messung startet direkt nach dem Anlegen.</p>
+          </div>
+        </div>
+        <div class="schedule-row">
+          <div class="schedule-mode">
+          <label for="stopMode">Ende</label>
+          <select name="stop_mode" id="stopMode"><option value="manual">Manuell</option><option value="duration">Nach Dauer</option><option value="end">Endzeitpunkt</option><option value="wake_count">Nach Wake-Ereignissen</option><option value="sleep_count">Nach Sleep-Ereignissen</option></select>
+          </div>
+          <div class="schedule-details">
+        <p id="scheduleStopHint" class="schedule-hint">Die Messung läuft, bis du sie manuell stoppst.</p>
+        <div id="durationLabel" class="schedule-conditional" hidden>
+          <label for="durationValue">Dauer</label>
+          <div class="schedule-duration"><input name="duration_value" id="durationValue" type="number" min="0.01" step="0.01" value="1"><select name="duration_unit" id="durationUnit" aria-label="Einheit der Messdauer"><option value="60">Minuten</option><option value="3600">Stunden</option><option value="1">Sekunden</option></select></div>
+        </div>
+        <label id="endAtLabel" class="schedule-conditional" hidden>Endzeit
+          <input name="scheduled_end_at" id="scheduledEndAt" type="datetime-local" step="1">
+        </label>
+        <div id="eventCountLabel" class="schedule-conditional" hidden>
+          <label for="eventCount">Anzahl bestätigter Ereignisse</label>
+          <input name="event_count" id="eventCount" type="number" min="1" max="1000000" step="1" value="5" aria-describedby="eventCountHelp">
+          <p id="eventCountHelp" class="schedule-hint"></p>
+        </div>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset class="event-settings">
+      <legend><span class="section-number" aria-hidden="true">3</span> Wake / Sleep erkennen</legend>
+      <!-- Keep this selector as the extension point for future reliable detection modes; backend validation must be extended together. -->
+      <label>Erkennungsmodus<select name="detection_mode" id="detectionMode"><option value="threshold">Stromschwellen und Mindestdauer</option><option value="spectral_compare">Spektralvergleich (experimentell)</option></select></label>
+      <div id="spectralSettings" class="hidden">
+        <p>FFT lernt 30 s bestätigten Sleep. Anhaltende Abweichungen werden separat markiert: FFT Wake in Pink, FFT Sleep in Türkis. Ereignisse und Auto-Stop verwenden weiterhin die Stromschwellen.</p>
+        <label>Spektrale Abweichung [dB]<input name="spectral_margin_db" type="number" min="3" max="60" step="any" value="12" required></label>
+        <p>Wake: mindestens 0,5 s Abweichung · Sleep: 2 s Rückkehr. Die 250-ms-Fenster begrenzen die Zeitauflösung; die FFT-Markierung ist ein geschätzter Beginn.</p>
+      </div>
+<div id="thresholdSettings" class="mode-settings">
+  <div class="detection-groups">
+    <section class="detection-group wake-group" aria-labelledby="wakeGroupTitle">
+      <div class="trigger-label"><h3 id="wakeGroupTitle">Wake</h3><span class="field-help"><button type="button" class="info-button" aria-label="Wake-Erkennung erklären" aria-describedby="wakeDetectionInfo">i</button><span class="field-tooltip" id="wakeDetectionInfo" role="tooltip">Wake wird oberhalb der Wake-Schwelle validiert und auf die erste Abweichung vom zuvor gelernten Sleep-Muster zurückdatiert. Wiederkehrende Sleep-Peaks werden anhand von Zeitpunkt, Dauer und Verlauf berücksichtigt. Zwischenstufen sind erlaubt. Eine Rückkehr zum Sleep-Strom verwirft einen unbestätigten Kandidaten.</span></span></div>
+      <div class="form-grid">
+    <div class="trigger-field"><label for="wakeThresholdUa">Wake über [µA] · 10.000 µA = 10 mA</label><input id="wakeThresholdUa" name="wake_threshold_ua" type="number" min="0.000001" step="any" value="10000" required></div>
+    <div class="trigger-field"><div class="trigger-label"><label for="wakeMinMs">Mindestdauer [ms]</label><span class="field-help"><button type="button" class="info-button" aria-label="Wake-Validierung erklären" aria-describedby="wakeValidationInfo">i</button><span class="field-tooltip" id="wakeValidationInfo" role="tooltip">Die Wake-Schwelle muss für diese Dauer überschritten sein. Die spätere Bestätigung validiert den früheren Beginn der Abweichung vom Sleep-Muster.</span></span></div><input id="wakeMinMs" name="wake_min_ms" type="number" min="0.000001" max="60000" step="any" value="20" required></div>
+      </div>
+    </section>
+    <section class="detection-group sleep-group" aria-labelledby="sleepGroupTitle">
+      <h3 id="sleepGroupTitle">Sleep</h3>
+      <div class="form-grid">
+    <div class="trigger-field"><label for="sleepThresholdUa">Sleep unter [µA]</label><input id="sleepThresholdUa" name="sleep_threshold_ua" type="number" min="0.000001" step="any" value="5" required></div>
+    <div class="trigger-field"><div class="trigger-label"><label for="sleepMinS">Mindestdauer [s]</label><span class="field-help"><button type="button" class="info-button" aria-label="Sleep-Validierung erklären" aria-describedby="sleepValidationInfo">i</button><span class="field-tooltip" id="sleepValidationInfo" role="tooltip">Sleep wird bestätigt, wenn der Strom für diese Dauer unter der Sleep-Schwelle bleibt. Der Beginn wird auf die Unterschreitung der Schwelle zurückdatiert.</span></span></div><input id="sleepMinS" name="sleep_min_s" type="number" min="0.000001" max="60" step="any" value="5" required></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="shared-settings"><h3>Aufzeichnung</h3><div class="form-grid">
+        <div class="trigger-field"><div class="trigger-label"><label for="preTriggerMs">Vorlauf [ms]</label><span class="field-help"><button type="button" class="info-button" aria-label="Info zu Vorlauf" aria-describedby="preTriggerMsInfo"><span aria-hidden="true">i</span></button><span class="field-tooltip" id="preTriggerMsInfo" role="tooltip">Rohdaten vor der rückwirkend bestätigten Wake-Flanke.</span></span></div><input id="preTriggerMs" name="pre_trigger_ms" type="number" min="0" max="5000" step="1" value="1000" required></div>
+        <div class="trigger-field" id="postTriggerLabel"><div class="trigger-label"><label for="postTriggerMs">Nachlauf [ms]</label><span class="field-help"><button type="button" class="info-button" aria-label="Info zu Nachlauf" aria-describedby="postTriggerMsInfo"><span aria-hidden="true">i</span></button><span class="field-tooltip" id="postTriggerMsInfo" role="tooltip">Rohdaten nach der rückwirkend bestätigten Sleep-Flanke, unabhängig vom Zeitpunkt der Validierung.</span></span></div><input id="postTriggerMs" name="post_trigger_ms" type="number" min="0" max="5000" step="1" value="1000" required></div>
+</div></div>
+      <div class="threshold-example">
+        <div class="trigger-label preview-help"><span class="field-help"><button type="button" class="info-button" aria-label="Beispielgrafik erklären" aria-describedby="thresholdPreviewInfo">i</button><span class="field-tooltip" id="thresholdPreviewInfo" role="tooltip">Schematisches Beispiel für Schwellen, Validierung, Vorlauf und Nachlauf. Gefüllter Punkt: Beginn; offener Punkt: spätere Validierung. Wake beginnt mit der Abweichung vom Sleep-Muster. Die farbigen Flächen zeigen die aufgezeichneten Rohdaten vor, während und nach dem Event.</span></span></div>
+        <svg id="thresholdPreview" viewBox="0 0 700 140" role="img" aria-label="Schematische Sleep/Wake-Erkennung mit Aufzeichnungsbereich" aria-describedby="thresholdLegend"></svg>
+        <div id="thresholdLegend" class="threshold-legend" aria-label="Legende zur Sleep/Wake-Grafik">
+          <span><i class="legend-dot wake" aria-hidden="true"></i> Wake-Beginn: Abweichung vom Sleep-Muster</span>
+          <span><i class="legend-dot wake open" aria-hidden="true"></i><span id="wakeValidationLegend"></span></span>
+          <span><i class="legend-dot sleep" aria-hidden="true"></i> Sleep-Beginn: unter Sleep-Schwelle</span>
+          <span><i class="legend-dot sleep open" aria-hidden="true"></i><span id="sleepValidationLegend"></span></span>
+          <div class="recording-legend">
+            <span><i class="legend-area pre" aria-hidden="true"></i><span id="preTriggerLegend"></span></span>
+            <span><i class="legend-area event" aria-hidden="true"></i> Event: Wake- bis Sleep-Beginn</span>
+            <span><i class="legend-area post" aria-hidden="true"></i><span id="postTriggerLegend"></span></span>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="measurement-preview"><legend><span class="section-number" aria-hidden="true">4</span> Messvorschau &amp; Trigger justieren</legend>
+      <div class="preview-session">
+        <div class="preview-intro"><h3>Trigger am Live-Signal abstimmen</h3><p>Stromkurve und FFT des gewählten PPK2 prüfen. Angepasste Schwellen werden oben übernommen und gelten für die spätere Messung.</p></div>
+        <div class="preview-toolbar preview-session-actions" role="group" aria-label="Vorschau steuern">
+          <button type="button" class="primary" id="measurementPreviewStart">Vorschau starten</button>
+          <button type="button" class="secondary" id="measurementPreviewPause" disabled>Live anhalten</button>
+          <button type="button" class="secondary" id="measurementPreviewStop" disabled>Vorschau schließen</button>
+        </div>
+      </div>
+      <p id="measurementPreviewStatus" role="status" aria-live="polite">Vorschau verwendet den gewählten PPK2. Daten bleiben vorübergehend; erst „Messung anlegen“ speichert eine Messung.</p>
+      <div id="measurementPreviewPlots" class="hidden">
+        <section class="preview-panel" aria-labelledby="measurementPreviewCurrentTitle">
+          <div class="preview-panel-head">
+            <div><h3 id="measurementPreviewCurrentTitle">Strom &amp; Trigger</h3><p>Schwellenlinien ziehen oder mit dem Werkzeug in die Kurve klicken.</p></div>
+            <div class="preview-toolbar">
+              <label class="preview-tool">Werkzeug<select id="measurementPreviewTool"><option value="navigate">Zoom / Verschieben</option><option value="wake">Wake-Schwelle setzen</option><option value="sleep">Sleep-Schwelle setzen</option></select></label>
+              <label>Stromskala<select id="measurementPreviewScale"><option value="log">Log</option><option value="linear">Linear</option></select></label>
+              <button type="button" class="secondary" id="measurementPreviewFollow">Live folgen</button>
+            </div>
+          </div>
+          <div id="measurementPreviewCurrent" class="preview-chart" aria-label="Stromvorschau mit einstellbaren Schwellen"></div>
+          <div class="preview-legend" aria-label="Trigger-Legende">
+            <span class="preview-wake"><i class="legend-dot wake" aria-hidden="true"></i> Wake-Schwelle</span>
+            <span class="preview-sleep"><i class="legend-dot sleep" aria-hidden="true"></i> Sleep-Schwelle</span>
+            <span><i class="preview-marker" aria-hidden="true"></i> Geschätzter Beginn</span>
+            <span><i class="preview-marker open" aria-hidden="true"></i> Bestätigt nach Mindestdauer</span>
+          </div>
+        </section>
+        <section class="preview-panel" aria-labelledby="measurementPreviewFftTitle">
+          <div class="preview-panel-head"><div><h3 id="measurementPreviewFftTitle">FFT-Spektrogramm</h3><p>Frequenzanteile des Stromsignals im zeitlichen Verlauf.</p></div></div>
+          <div id="measurementPreviewFft" class="preview-chart" aria-label="FFT-Spektrogramm der Vorschau"></div>
+        </section>
+        <section id="measurementPreviewScorePanel" class="preview-panel hidden" aria-labelledby="measurementPreviewScoreTitle">
+          <div class="preview-panel-head"><div><h3 id="measurementPreviewScoreTitle">Spektrale Abweichung</h3><p>Vergleich mit dem gelernten Sleep. Die pinke Linie ziehen, um die FFT-Schwelle anzupassen.</p></div><span class="preview-badge">Experimentell</span></div>
+          <div id="measurementPreviewScore" class="preview-chart preview-score" aria-label="Spektrale Abweichung mit einstellbarer FFT-Schwelle"></div>
+          <p class="preview-panel-note">Ereignisse und Auto-Stop verwenden weiterhin die Stromschwellen.</p>
+        </section>
+      </div>
+      <details class="preview-guidance"><summary>Hinweise zum Justieren &amp; zur Vorschau</summary><div><p>„Live anhalten“ behält den Ausschnitt zum Justieren. Mit „Live folgen“ richtet sich die Ansicht wieder auf die neuesten Daten aus.</p><p>Parameteränderungen berechnen die letzten 60 s neu; dabei werden Sleep und die FFT-Referenz neu gelernt. Die reguläre Messung beginnt anschließend mit einer neuen Lernphase.</p><p>Die Vorschau speichert keine Messung. Erst „Messung anlegen“ übernimmt die Einstellungen und startet die geplante Aufzeichnung.</p></div></details>
+    </fieldset>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Abbrechen</button><button type="submit" class="primary" id="measurementSubmit">▶ Messung anlegen</button></div>
+  </form>
+</dialog>
+
+<dialog id="editDialog"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATA</span><h2>Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit>×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Device<input name="device"></label><label>Firmware<input name="firmware"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
+<div id="toast" class="toast"></div>
+<div id="currentChartTooltip" class="current-chart-tooltip hidden" role="tooltip"></div>
+<script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>
+<script src="/static/time-inputs.js?v=1.0.6-time-units"></script>
+<script src="/static/cycle-energy.js?v=1.0.6-detail-layout"></script>
+<script src="/static/live-stream.js?v=1.0.6-spectral-compare"></script>
+<script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
+<script src="/static/app.js?v=1.0.6-preview"></script>
+</body></html>

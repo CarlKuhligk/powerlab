@@ -1,0 +1,11 @@
+fastapi>=0.116,<1
+uvicorn[standard]>=0.35,<1
+pydantic>=2.11,<3
+pydantic-settings>=2.10,<3
+sqlalchemy>=2.0,<3
+numpy>=2.0,<3
+pyarrow>=20,<24
+python-multipart>=0.0.20,<1
+ppk2-api @ https://github.com/IRNAS/ppk2-api-python/archive/refs/heads/master.zip
+pyserial>=3.5,<4
+typst>=0.15,<0.16

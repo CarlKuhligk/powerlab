@@ -1,0 +1,23 @@
+services:
+  powerlab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: powerlab:1.0.6
+    container_name: powerlab
+    restart: unless-stopped
+    ports:
+      - "8889:8889"
+    environment:
+      POWERLAB_HOST: 0.0.0.0
+      POWERLAB_PORT: 8889
+      POWERLAB_DATA_DIR: /data
+      POWERLAB_DATABASE_URL: sqlite:////data/powerlab.db
+    volumes:
+      - powerlab_data:/data
+    # Linux: uncomment and adjust to the PPK2 measurement interface.
+    # devices:
+    #   - /dev/ttyACM1:/dev/ttyACM1
+
+volumes:
+  powerlab_data:

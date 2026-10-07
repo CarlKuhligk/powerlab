@@ -1,0 +1,49 @@
+# Local environment and secrets (keep the configuration template)
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Python bytecode, build output and package metadata
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+
+# Test tools, temporary measurements and caches
+/.test-tools/
+/.test-tmp*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local measurement data, database files and logs
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite*-journal
+*.sqlite*-wal
+*.sqlite*-shm
+*.log
+
+# Local editor settings and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
