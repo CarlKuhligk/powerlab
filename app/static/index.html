@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="stylesheet" href="/static/styles.css?v=1.0.6-battery-life">
-  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-battery-distribution">
+  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-battery-print">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
@@ -66,7 +66,7 @@
           <label class="battery-field">Einfluss der Messungen<select id="batteryWeighting"><option value="mean">Mittel · jede Messung gleich</option><option value="cycle_count">Gewichtet · nach gültigen Zyklen</option><option value="custom">Eigene Gewichte</option></select></label>
           <button class="secondary" id="batteryClearSelection">Auswahl aufheben</button>
         </div>
-        <p class="form-hint">Bei „Mittel“ zählt jede Messung gleich. „Gewichtet“ richtet den Einfluss nach der Anzahl gültiger Zyklen. Eigene Gewichte sind relative Anteile, zum Beispiel 7 und 3 für 70 % und 30 %; Gewicht 0 hat keinen Einfluss.</p>
+        <details class="battery-help"><summary>Wie wirkt die Gewichtung?</summary><p>Bei „Mittel“ zählt jede Messung gleich. „Gewichtet“ richtet den Einfluss nach der Anzahl gültiger Zyklen. Eigene Gewichte sind relative Anteile, zum Beispiel 7 und 3 für 70 % und 30 %. Gewicht 0 hat keinen Einfluss auf Ergebnis, Streuung oder Grenzen.</p></details>
         <p id="batterySelectionCount" aria-live="polite">0 Messungen ausgewählt</p>
         <div class="event-scroll battery-source-list"><table><thead><tr><th>Auswahl</th><th>Messung</th><th>Gültige Zyklen</th><th>Eigenes Gewicht</th><th>Einfluss</th></tr></thead><tbody id="batterySourceRows"></tbody></table></div>
         <p id="batteryStatus" role="status" aria-live="polite">Wähle eine Messung mit gültigen Sleep-/Wake-Zyklen.</p>
@@ -75,28 +75,36 @@
         <div class="card battery-controls">
           <h3>Deine Geräteeinstellung</h3>
           <label class="battery-field">Nutzbare Batterieenergie<div class="battery-input-unit"><input id="batteryEnergy" type="number" min="0.000001" step="any" value="1" aria-label="Nutzbare Batterieenergie"><select id="batteryEnergyUnit" aria-label="Einheit der Batterieenergie"><option value="Wh">Wh</option><option value="mWh">mWh</option></select></div></label>
+          <details class="battery-help"><summary>Welche Batterieenergie eingeben?</summary><p>Verwende die im vorgesehenen Betrieb nutzbare Energie in Wh oder mWh. Bei annähernd konstanter Spannung gilt: Energie [Wh] = Kapazität [Ah] × Spannung [V]. Verluste der Spannungsversorgung und die Abschaltspannung müssen in deiner Energieangabe berücksichtigt sein; sie werden hier nicht zusätzlich berechnet.</p></details>
           <label class="battery-field">Timing einstellen über<select id="batteryMode"><option value="sleep">Sleep-Dauer zwischen Wakes</option><option value="duty">Wake-Duty-Cycle</option></select></label>
           <label class="battery-field"><span id="batteryValueLabel">Sleep-Dauer zwischen Wakes</span><div class="battery-input-unit"><input id="batteryValue" type="number" min="0" step="any" value="60" aria-label="Gewählte Sleep-Dauer oder Duty-Cycle"><select id="batteryTimeUnit" aria-label="Einheit der Sleep-Dauer"><option value="seconds">Sekunden</option><option value="minutes">Minuten</option><option value="hours">Stunden</option></select></div></label>
           <p id="batteryMeasuredMedian" class="form-hint"></p>
           <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
         </div>
         <div class="card chart-card battery-chart-card">
-          <div class="card-title-row"><div><h3>Mittlere Laufzeit und ihre Unsicherheit</h3><p>Gemessene Sleep-/Wake-Streuung bei deiner festen Timing-Einstellung</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
+          <div class="card-title-row"><div><h3>Mittlere Laufzeit und ihre Unsicherheit</h3><p>Gemessene Sleep-/Wake-Streuung bei deiner festen Timing-Einstellung</p></div><button class="secondary" id="batteryExport" disabled>PDF-Bericht herunterladen</button></div>
           <div class="battery-result-grid"><div><span>Geschätzte mittlere Laufzeit</span><strong id="batteryRuntime">—</strong></div><div><span>90-%-Unsicherheitsintervall · Näherung</span><strong id="batteryBand">—</strong></div><div><span>Mittlere Leistung</span><strong id="batteryPower">—</strong></div></div>
-          <p class="form-hint">Grüne Linie: Laufzeitschätzung aus mittlerer Leistung. Blaue Kurve: angenäherte Unsicherheit dieser Schätzung. Schattierter Bereich: näherungsweises 90-%-Intervall. Deine Sleep-Dauer bleibt fest; die gemessene Sleep-Leistung und Wake-Werte bestimmen die Streuung der Schätzung.</p>
+          <p class="form-hint">Grün: Laufzeitschätzung · Blau: Unsicherheitsdichte · Schattierung: näherungsweises 90-%-Intervall.</p>
           <div id="batteryChart" class="chart large-chart" aria-label="Unsicherheit der mittleren Laufzeit mit näherungsweisem 90-Prozent-Intervall"></div>
           <p id="batteryDistributionNote" class="form-hint"></p>
           <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
         </div>
       </div>
       <div class="card table-card">
-        <div class="card-title-row"><div><h3>Übernommene Messstatistik</h3><p>Gewichtete Stichprobenvarianz einschließlich Unterschieden zwischen den Messungen. Jeder Zyklus erhält den Messungsanteil / Zyklusanzahl; bei gleichen Zyklusgewichten entspricht die Korrektur n − 1. Sleep-Leistung wird für die frei gewählte Sleep-Dauer normiert.</p></div></div>
+        <div class="card-title-row"><div><h3>Übernommene Messstatistik</h3><p>Diese Werte beschreiben die Streuung der gemessenen Einzelzyklen.</p></div></div>
         <div class="event-scroll"><table><thead><tr><th>Kennwert</th><th>Mittelwert</th><th>Minimum</th><th>Maximum</th><th>Standardabweichung</th><th>Varianz</th></tr></thead><tbody id="batteryStatisticsRows"></tbody></table></div>
+        <details class="battery-help battery-assumptions"><summary>Messstatistik richtig lesen</summary><p>Standardabweichung und Varianz beschreiben Unterschiede zwischen den Einzelzyklen, nicht die Unsicherheit des Mittelwerts. Die Standardabweichung hat die Einheit der Messgröße; die Varianz deren quadrierte Einheit.</p><p>Jeder Zyklus erhält den Messungsanteil / Zyklusanzahl. Die gewichtete Stichprobenvarianz enthält auch Unterschiede zwischen den Messungen. Sie verwendet die Korrektur 1 − Summe der quadrierten Zyklusgewichte; bei gleichen Zyklusgewichten entspricht dies der Division durch n − 1. Mindestens zwei gültige Zyklen sind erforderlich.</p><p>Die Sleep-Energie gehört zur tatsächlich gemessenen Sleep-Dauer. Die Sleep-Leistung in der Tabelle beschreibt die einzelnen Zyklen; das Laufzeitmodell verwendet je Messung gesamte Sleep-Energie / gesamte Sleep-Dauer. Bei unterschiedlichen Sleep-Dauern können sich diese Mittelwerte unterscheiden.</p></details>
       </div>
       <div class="card table-card">
-        <div class="card-title-row"><div><h3>Unsicherheitsintervall der mittleren Laufzeit</h3><p>Die Grenzen werden durch Unsicherheitsfortpflanzung aus den gemessenen Mittelwerten und ihren Kovarianzen geschätzt. Sie sind keine garantierten Grenzen der tatsächlichen Batterielaufzeit.</p></div></div>
+        <div class="card-title-row"><div><h3>Unsicherheitsintervall der mittleren Laufzeit</h3><p>P5 und P95 begrenzen das näherungsweise 90-%-Intervall der Schätzung.</p></div></div>
         <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Laufzeitschätzung</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
-        <p class="form-hint battery-assumptions">Die Kurve ist eine Näherung für die statistische Unsicherheit der mittleren Laufzeit. Vorausgesetzt werden unabhängige, repräsentative Zyklen und unabhängige Messungen; die gewählten Messungsanteile sind fest. Die Kovarianzen innerhalb eines Sleep-/Wake-Paars werden berücksichtigt. Die Sleep-Leistung wird nach gemessener Sleep-Dauer gewichtet und auf deine gewählte Dauer angewendet. Mindestens zwei Zyklen je berücksichtigter Messung sind erforderlich. Bei wenigen Zyklen oder großer relativer Unsicherheit ist die Näherung eingeschränkt. Zeitliche Abhängigkeiten, systematische Fehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen werden nicht modelliert.</p>
+        <details class="battery-help battery-assumptions" id="batteryMethod"><summary>Berechnung und Annahmen</summary>
+          <p><strong>Modell:</strong> Laufzeit = nutzbare Batterieenergie / mittlere Leistung. Die Zyklusenergie setzt sich aus gemessener Wake-Energie und Sleep-Leistung × gewählter Sleep-Dauer zusammen. Die mittlere Leistung ist Zyklusenergie / Zyklusdauer. Im Duty-Cycle-Modus ergibt sich die Sleep-Dauer aus der gemessenen mittleren Wake-Dauer und dem eingestellten Wake-Anteil.</p>
+          <p><strong>Unsicherheit:</strong> Die lineare Unsicherheitsfortpflanzung auf der logarithmischen Laufzeitskala (Delta-Methode) berücksichtigt die Kovarianzen innerhalb zusammengehöriger Sleep-/Wake-Paare. Je Messung wird die Sleep-Leistung als gesamte Sleep-Energie / gesamte Sleep-Dauer geschätzt; die Streuung beider Größen und ihre Zusammenhänge mit Wake-Energie und Wake-Dauer gehen ein. Die Mittelwertunsicherheit entsteht aus der Stichprobenvarianz der linearisierten Beiträge / Zyklusanzahl. Bei mehreren unabhängigen Messungen werden diese Beiträge mit dem Quadrat des festen Messungsanteils kombiniert.</p>
+          <p><strong>Diagramm und Perzentile:</strong> Die blaue Kurve ist eine lognormale Näherung für die Unsicherheit der mittleren Laufzeit. Ihr Median (P50) entspricht der grünen Laufzeitschätzung. Die Fläche unter der Dichtekurve entspricht 100 %; die Höhe ist eine Dichte in Prozent pro Laufzeiteinheit, keine Wahrscheinlichkeit einer einzelnen Laufzeit. P5 bis P95 umfassen näherungsweise 90 % dieser Modellverteilung. Gezeigt werden ±4 Standardunsicherheiten auf der logarithmischen Skala, keine harten Min-/Max-Grenzen. Die Kurve ist keine Häufigkeitsverteilung dauerhaft wiederholter Einzelzyklen.</p>
+          <p><strong>Voraussetzungen:</strong> Unabhängige, repräsentative Zyklen und unabhängige Messungen. Mindestens zwei gültige Zyklen je Messung mit positivem Einfluss. Bei wenigen Zyklen oder großer relativer Unsicherheit ist die Näherung eingeschränkt. Keine beobachtete Streuung belegt keine fehlerfreie Messung.</p>
+          <p><strong>Grenzen:</strong> Batterieenergie, Timing und Messungsanteile gelten als fest. Zeitliche Abhängigkeiten, systematische Messfehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen sind nicht enthalten. Das Intervall ist keine garantierte Laufzeitprognose.</p>
+        </details>
       </div>
     </section>
 
@@ -356,6 +364,6 @@
 <script src="/static/cycle-energy.js?v=1.0.6-wake-variance"></script>
 <script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/battery-life.js?v=1.0.6-battery-uncertainty"></script>
+<script src="/static/battery-life.js?v=1.0.6-battery-print"></script>
 <script src="/static/app.js?v=1.0.6-battery-life"></script>
 </body></html>

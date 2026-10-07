@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -346,30 +347,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post('/api/battery-report')
     def battery_multi_report(payload: BatteryMultiReportRequest):
-        from .battery_report import render_multi_report
+        from .battery_report import render_multi_report, report_filename
+        generated_at = datetime.now(timezone.utc)
         try:
             measurements = [mgr().get_measurement(s.measurement_id) for s in payload.sources]
-            body = render_multi_report(measurements, payload)
+            body = render_multi_report(measurements, payload, generated_at=generated_at)
         except KeyError as error:
             raise HTTPException(status_code=404, detail='Measurement not found') from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return Response(body, media_type='application/pdf', headers={
-            'Content-Disposition': 'attachment; filename="battery_life_combined.pdf"'})
+            'Content-Disposition': f'attachment; filename="{report_filename(generated_at)}"'})
 
     @app.post('/api/measurements/{measurement_id}/battery-report')
     def battery_report(measurement_id: str, payload: BatteryReportRequest):
-        from .battery_report import render_report
+        from .battery_report import render_report, report_filename
+        generated_at = datetime.now(timezone.utc)
         try:
             measurement = mgr().get_measurement(measurement_id)
-            body = render_report(measurement, measurement['cycle_energy'], payload)
+            body = render_report(measurement, measurement['cycle_energy'], payload, generated_at=generated_at)
         except KeyError as error:
             raise HTTPException(status_code=404, detail='Measurement not found') from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
-        safe_id = ''.join(c for c in measurement_id if c.isalnum() or c in '-_')
         return Response(body, media_type='application/pdf', headers={
-            'Content-Disposition': f'attachment; filename="battery_life_{safe_id}.pdf"'})
+            'Content-Disposition': f'attachment; filename="{report_filename(generated_at, measurement_id)}"'})
 
     @app.get("/api/measurements/{measurement_id}/overview")
     async def measurement_overview(

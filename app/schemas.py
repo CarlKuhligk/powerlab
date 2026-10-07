@@ -13,7 +13,8 @@ class BatteryReportRequest(BaseModel):
     # Optional only for compatibility with the previous timing-curve export.
     range_min: float | None = Field(default=None, ge=0, le=1e12, allow_inf_nan=False)
     range_max: float | None = Field(default=None, gt=0, le=1e12, allow_inf_nan=False)
-    chart_png: str = Field(max_length=6_000_000, pattern=r'^data:image/png;base64,')
+    # Legacy clients may still send a snapshot; the PDF chart is computed locally.
+    chart_png: str | None = Field(default=None, max_length=6_000_000, pattern=r'^data:image/png;base64,')
 
     @model_validator(mode='after')
     def validate_range(self):

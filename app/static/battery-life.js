@@ -213,7 +213,7 @@ const BatteryLifeUI=(()=>{
       el('Power').textContent=point.powerUw>=1000?`${number(point.powerUw/1000)} mW`:`${number(point.powerUw)} µW`;
       el('Timing').textContent=`Sleep ${fmtDuration(point.sleepS)} · Wake ${fmtEventDuration(data.wakeS*1e6)} · Duty ${number(point.dutyPct)} %`;
       el('WakeEnergy').textContent=fmtEnergy(data.medianWakeEnergyUwh);
-      el('DistributionNote').textContent=(distribution.reason||`Standardunsicherheit der Laufzeitschätzung: ${life(distribution.standardErrorH)}. Die blaue Kurve zeigt die angenäherte statistische Unsicherheit der mittleren Laufzeit; der schattierte Bereich ist ein näherungsweises 90-%-Intervall.`)+' Die Berechnung setzt unabhängige, repräsentative Zyklen und unabhängige Messungen voraus. Zusammenhänge innerhalb eines Sleep-/Wake-Paars werden berücksichtigt. Messungsanteile und Batterieenergie gelten als fest. Bei wenigen Zyklen oder großer Streuung ist die Näherung eingeschränkt. Zeitliche Abhängigkeiten, systematische Messfehler, Alterung und Selbstentladung sind nicht enthalten.';
+      el('DistributionNote').textContent=distribution.reason||`Standardunsicherheit der mittleren Laufzeit: ${life(distribution.standardErrorH)}. Das Intervall ist eine statistische Näherung und keine Laufzeitgarantie.`;
       el('PercentileRows').innerHTML=[['Untere 90-%-Grenze · P5',5,'p05H'],['P10',10,'lowH'],['Laufzeitschätzung · P50',50,'medianH'],['P90',90,'highH'],['Obere 90-%-Grenze · P95',95,'p95H']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${distribution.available?life(point[key]):'Nicht schätzbar'}</td></tr>`).join('');
       el('StatisticsRows').innerHTML=[['Wake-Energie','wakeEnergy','µWh'],['Sleep-Energie · gemessene Dauer','sleepEnergy','µWh'],['Sleep-Leistung · auf Dauer normiert','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}</tr>`).join('');
       el('Export').disabled=false;
@@ -308,29 +308,19 @@ const BatteryLifeUI=(()=>{
     try{
       render();const token=renderToken;
       const values=settings();
+      const exportMode=mode();
       if(el('Status').classList.contains('event-load-error'))return;
       await renderChain;
-      const graph=el('Chart'),printable=document.createElement('div');
-      printable.style.cssText='position:fixed;left:-10000px;top:0;width:1400px;height:700px';
-      document.body.appendChild(printable);
-      let chart;
-      try{
-        const layout={...graph.layout,paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',font:{color:'#23323e',size:16},
-          legend:{...graph.layout.legend,font:{color:'#23323e',size:14}},
-          xaxis:{...graph.layout.xaxis,gridcolor:'#d7e0e5',color:'#23323e'},
-          yaxis:{...graph.layout.yaxis,gridcolor:'#d7e0e5',color:'#23323e'}};
-        const traces=graph.data.map(trace=>({...trace,line:{...trace.line,color:trace.line?.color==='#65d98b'?'#16713b':trace.line?.color==='#6ea8fe'?'#2366ac':trace.line?.color}}));
-        await Plotly.newPlot(printable,traces,layout,{displaylogo:false});
-        chart=await Plotly.toImage(printable,{format:'png',width:1400,height:700,scale:1});
-      }finally{Plotly.purge(printable);printable.remove()}
       if(token!==renderToken||ids.join(',')!==[...selected.keys()].join(',')||state.view!=='battery')throw new Error('Die Eingaben haben sich während des Exports geändert. Bitte erneut exportieren.');
       const response=await fetch('/api/battery-report',{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({energy_wh:values.energyWh,
-          mode:mode(),value:values.value,chart_png:chart,
+          mode:exportMode,value:values.value,
           weighting,sources:ids.map(id=>({measurement_id:id,weight:weighting==='custom'?selected.get(id):1}))})});
       if(!response.ok){const error=await response.json();throw new Error(error.detail||'PDF-Export fehlgeschlagen.')}
       const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');
-      link.href=url;link.download='battery_life_combined.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1];
+      link.href=url;link.download=filename||`battery_life_${new Date().toISOString().replace(/[:.]/g,'-')}.pdf`;
+      link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(error){status(typeof error.message==='string'?error.message:'PDF-Export fehlgeschlagen.',true)}
     finally{el('Export').disabled=!data||el('Status').classList.contains('event-load-error')}
   }

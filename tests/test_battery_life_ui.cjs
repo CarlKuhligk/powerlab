@@ -186,3 +186,26 @@ test('changing weights recalculates cached measurements without resetting chosen
   h.el('ClearSelection').listeners.click();assert.equal(h.el('Export').disabled,true);
   assert.match(h.el('Status').textContent,/mindestens eine/);
 });
+
+test('PDF download uses the server timestamp and needs no browser image export',async()=>{
+  const h=harness();h.ui.install();
+  const opening=h.ui.open('chosen');
+  h.requests[0].resolve([{id:'chosen',name:'Chosen',status:'completed'}]);
+  await new Promise(r=>setImmediate(r));
+  h.requests[1].resolve(summary());await opening;await h.flush();
+  const filename='battery_life_combined_2026-10-07_13-14-15_123456Z.pdf';
+  let posted,download;
+  h.context.fetch=async(url,options)=>{
+    posted={url,body:JSON.parse(options.body)};
+    return {ok:true,headers:{get:()=>`attachment; filename="${filename}"`},blob:async()=>({})};
+  };
+  h.context.URL={createObjectURL:()=> 'blob:report',revokeObjectURL(){}};
+  h.context.document.createElement=()=>({click(){download={filename:this.download,url:this.href}}});
+  await h.el('Export').listeners.click();
+  assert.equal(posted.url,'/api/battery-report');
+  assert.ok(!('chart_png' in posted.body));
+  assert.equal(posted.body.energy_wh,1);
+  assert.deepEqual(posted.body.sources,[{measurement_id:'chosen',weight:1}]);
+  assert.deepEqual(download,{filename,url:'blob:report'});
+  assert.equal(h.el('Export').disabled,false);
+});
