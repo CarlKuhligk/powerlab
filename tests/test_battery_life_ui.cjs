@@ -65,7 +65,9 @@ test('calculator plots bounded measurement shares including 24 hour sleep',async
   h.requests[0].resolve([{id:'chosen',name:'Chosen',status:'completed'}]);
   await new Promise(r=>setImmediate(r));
   h.requests[1].resolve(summary());await opening;await h.flush();
-  assert.equal(h.plots.at(-1).traces.filter(t=>t.type==='bar').length,1);
+  assert.equal(h.plots.at(-1).traces.filter(t=>t.type==='bar').length,0);
+  assert.equal(h.plots.at(-1).traces[0].mode,'lines');
+  assert.equal(h.plots.at(-1).traces[0].fill,'tozeroy');
   assert.equal(h.plots.at(-1).layout.shapes.filter(s=>s.type==='rect').length,2);
   assert.match(h.el('StatisticsRows').innerHTML,/Varianz|µWh²/);
   assert.match(h.el('PercentileRows').innerHTML,/P95/);
@@ -80,7 +82,7 @@ test('calculator plots bounded measurement shares including 24 hour sleep',async
   const point=h.model.evaluate(h.model.combine([{id:'chosen',summary:summary()}]),1,'sleep',86400);
   close(plot.layout.xaxis.range[0],Math.min(point.minH,point.expectedH)/8760);
   close(plot.layout.xaxis.range[1],Math.max(point.maxH,point.expectedH)/8760);
-  close(histogram.y.reduce((a,b)=>a+b,0),100);
+  close(histogram.x.slice(1).reduce((area,x,i)=>area+(x-histogram.x[i])*(histogram.y[i]+histogram.y[i+1])/2,0),100);
   assert.match(plot.layout.yaxis.title.text,/%/);
   assert.match(h.el('Band').textContent,/bis/);
   h.el('Energy').value='0';h.el('Energy').listeners.input();await h.flush();
@@ -98,8 +100,14 @@ test('distribution preserves measured scatter and has no extrapolated tails',()=
   close(result.bins[0].leftH,result.point.minH);
   close(result.bins.at(-1).rightH,result.point.maxH);
   close(result.bins.reduce((a,b)=>a+b.share,0),1);
+  assert.equal(result.density.length,241);
+  close(result.density[0].hours,result.point.minH);
+  close(result.density.at(-1).hours,result.point.maxH);
+  assert.ok(result.density.every(p=>Number.isFinite(p.densityPerH)&&p.densityPerH>=0));
+  close(result.density.slice(1).reduce((area,p,i)=>area+(p.hours-result.density[i].hours)*(p.densityPerH+result.density[i].densityPerH)/2,0),1);
   close(model.distribution(data,2,'sleep',86400).stddevH,result.stddevH*2);
   const doubled=model.distribution(data,2,'sleep',86400);
+  result.density.forEach((p,i)=>{close(doubled.density[i].hours,2*p.hours);close(doubled.density[i].densityPerH,p.densityPerH/2)});
   result.bins.forEach((b,i)=>{close(doubled.bins[i].leftH,2*b.leftH);close(doubled.bins[i].share,b.share)});
   assert.notEqual(model.distribution(data,1,'sleep',60).point.expectedH,result.point.expectedH);
   const one=summary();one.valid_wake_phases=one.valid_wake_phases.slice(0,1);one.valid_sleep_phases=one.valid_sleep_phases.slice(0,1);

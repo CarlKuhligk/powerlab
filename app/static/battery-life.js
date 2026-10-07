@@ -78,7 +78,22 @@ const BatteryLifeModel=(()=>{
     const width=(point.maxH-point.minH)/count,total=weights.reduce((a,b)=>a+b,0);
     const bins=Array.from({length:count},(_,i)=>({leftH:point.minH+i*width,rightH:i===count-1?point.maxH:point.minH+(i+1)*width,share:0}));
     point.scenariosH.forEach((hours,i)=>{const bin=Math.min(count-1,Math.floor((hours-point.minH)/width));bins[bin].share+=weights[i]/total});
-    return {point,meanH,stddevH,varianceH2,bins,reason:''};
+    // Smooth the weighted observations in normalized coordinates. Reflections
+    // reduce edge bias; numerical normalization keeps the bounded area at one.
+    const range=point.maxH-point.minH;
+    const positions=point.scenariosH.map(hours=>(hours-point.minH)/range);
+    const normalized=weights.map(weight=>weight/total);
+    const effectiveCount=1/normalized.reduce((sum,w)=>sum+w*w,0);
+    const bandwidth=Math.max(1/240,Math.min(.5,1.06*(stddevH/range)*effectiveCount**(-.2)));
+    const density=Array.from({length:241},(_,i)=>{
+      const x=i/240;
+      const value=positions.reduce((sum,p,j)=>sum+normalized[j]*
+        (Math.exp(-.5*((x-p)/bandwidth)**2)+Math.exp(-.5*((x+p)/bandwidth)**2)+Math.exp(-.5*((x-(2-p))/bandwidth)**2)),0);
+      return {hours:point.minH+x*range,value};
+    });
+    const area=density.slice(1).reduce((sum,p,i)=>sum+(p.value+density[i].value)/2/240,0);
+    density.forEach(p=>{p.densityPerH=p.value/area/range;delete p.value});
+    return {point,meanH,stddevH,varianceH2,bins,density,reason:''};
   }
   function combine(sources,weighting='mean'){
     if(!sources.length||!['mean','cycle_count','custom'].includes(weighting))throw new Error('Bitte Messungen und eine gültige Gewichtung auswählen.');
@@ -170,14 +185,14 @@ const BatteryLifeUI=(()=>{
       el('Power').textContent=point.powerUw>=1000?`${number(point.powerUw/1000)} mW`:`${number(point.powerUw)} µW`;
       el('Timing').textContent=`Sleep ${fmtDuration(point.sleepS)} · Wake ${fmtEventDuration(data.wakeS*1e6)} · Duty ${number(point.dutyPct)} %`;
       el('WakeEnergy').textContent=fmtEnergy(data.medianWakeEnergyUwh);
-      el('DistributionNote').textContent=distribution.reason||`Gemessene Verbrauchsszenarien: ${life(point.minH)} bis ${life(point.maxH)}. Jeder Balken zeigt den gewichteten Anteil im Laufzeitbereich. P5–P95 sind empirische Perzentile, keine garantierte 90-%-Prognose. Die Achse skaliert automatisch; Kapazitätsänderungen verschieben die Laufzeitwerte, können aber eine ähnliche Balkenform ergeben. Bei langen Sleep-Dauern dominiert die gemessene Sleep-Leistung.`;
+      el('DistributionNote').textContent=distribution.reason||`Gemessene Verbrauchsszenarien: ${life(point.minH)} bis ${life(point.maxH)}. Die Kurve zeigt eine geglättete Schätzung der gewichteten Verteilungsdichte innerhalb dieser Grenzen. Die Fläche unter der Kurve entspricht 100 %; die Höhe ist kein Anteil an einer einzelnen Laufzeit. Bei wenigen Zyklen hängt die Form stark von der Glättung ab. P5–P95 bleiben empirische Perzentile der Messwerte. Die Achse skaliert automatisch; Kapazitätsänderungen können eine ähnliche Kurvenform ergeben.`;
       el('PercentileRows').innerHTML=[['Minimum',0,'minH'],['P5',5,'p05H'],['P10',10,'lowH'],['P50',50,'medianH'],['P90',90,'highH'],['P95',95,'p95H'],['Maximum',100,'maxH']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${data.count>1||p===50?life(point[key]):'Ab zwei gültigen Zyklen'}</td></tr>`).join('');
       el('StatisticsRows').innerHTML=[['Wake-Energie','wakeEnergy','µWh'],['Sleep-Energie · gemessene Dauer','sleepEnergy','µWh'],['Sleep-Leistung · auf Dauer normiert','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}</tr>`).join('');
       el('Export').disabled=false;
       status(`${data.sources.length} ausgewählte Messungen · ${data.activeMeasurementCount} mit positivem Einfluss · ${data.count} gültige Zyklen bei ${data.voltageV} V${data.interpolatedCount?` · ${data.interpolatedCount} Zyklen mit ergänzten Datenlücken`:''}. ${data.count<2?'Für eine Streuungsauswertung sind mindestens zwei Zyklen nötig.':''}`);
       const display=point.expectedH>=8760?{factor:8760,label:'Jahre'}:point.expectedH>=2160?{factor:730,label:'Monate'}:point.expectedH>=336?{factor:168,label:'Wochen'}:{factor:24,label:'Tage'};
       const traces=[],shapes=[],annotations=[];
-      if(bins.length)traces.push({x:bins.map(b=>(b.leftH+b.rightH)/2/display.factor),y:bins.map(b=>b.share*100),width:bins.map(b=>(b.rightH-b.leftH)/display.factor),customdata:bins.map(b=>[b.leftH/display.factor,b.rightH/display.factor]),type:'bar',marker:{color:'#6ea8fe',line:{color:'#121820',width:1}},name:'Gewichtete Messszenarien',hovertemplate:`%{customdata[0]:.3f} bis %{customdata[1]:.3f} ${display.label}<br>Anteil: %{y:.2f} %<extra></extra>`});
+      if(bins.length)traces.push({x:distribution.density.map(p=>p.hours/display.factor),y:distribution.density.map(p=>p.densityPerH*display.factor*100),type:'scatter',mode:'lines',line:{color:'#6ea8fe',width:2.5,shape:'linear'},fill:'tozeroy',fillcolor:'rgba(110,168,254,.18)',name:'Geglättete Messszenarien',hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<br>Dichte: %{y:.3f} % / ${display.label}<extra></extra>`});
       if(data.count>1&&Number.isFinite(point.maxH))shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.minH/display.factor,x1:point.maxH/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.08)',line:{width:0},layer:'below'});
       if(bins.length)shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.p05H/display.factor,x1:point.p95H/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.18)',line:{width:0},layer:'below'});
       const markers=[[point.expectedH,'Laufzeit aus mittlerer Leistung','#65d98b','solid'],[point.medianH,'Empirischer Median','#f2c66b','dash']];
@@ -195,7 +210,7 @@ const BatteryLifeUI=(()=>{
       const compact=el('Chart').clientWidth>0&&el('Chart').clientWidth<500;
       const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:12},margin:{l:compact?66:82,r:24,t:compact?160:70,b:86},
         xaxis:{title:{text:`Batterielaufzeit [${display.label}]`,standoff:16},range:Number.isFinite(max)?[Math.max(0,min-padding)/display.factor,(max+padding)/display.factor]:undefined,type:'linear',gridcolor:'#252d35',zeroline:false},
-        yaxis:{title:{text:'Gewichteter Szenarioanteil [%]',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
+        yaxis:{title:{text:bins.length?`Verteilungsdichte [% / ${display.label}]`:'Szenarioanteil [%]',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
         annotations,legend:{orientation:'h',x:0,y:1.03,yanchor:'bottom',font:{size:10}},shapes,hovermode:'x unified'};
       renderChain=renderChain.catch(()=>{}).then(async()=>{
         if(token!==renderToken||state.view!=='battery')return;

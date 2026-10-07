@@ -22,10 +22,11 @@ Erstellt: #report.generated
 #rows-table(report.setup + report.results)
 = Laufzeitverteilung für die gewählte Einstellung
 #image("chart.png", width: 100%)
-Blau: gewichtete Anteile gemessener Verbrauchsszenarien in Laufzeitbereichen.
+Blau: gegl?ttete Sch?tzung der gewichteten Verteilungsdichte gemessener Verbrauchsszenarien.
 Grün: Laufzeit aus mittlerer Leistung. Goldene Linie: empirischer Median.
 Helle Fläche: beobachtetes Min/Max; dunklere Fläche: empirisches P5–P95-Intervall.
-Die x-Achse zeigt Laufzeit in automatisch gewählten Einheiten, die y-Achse Szenarioanteile in Prozent.
+Die x-Achse zeigt Laufzeit in automatisch gewählten Einheiten, die y-Achse Verteilungsdichte in Prozent pro Laufzeiteinheit.
+Die Fl?che unter der Kurve entspricht 100 %. Bei einer einzelnen Laufzeit wird eine Markierung gezeigt.
 Die Verteilung reicht nicht über die Min/Max-Grenzen der gemessenen Szenarien hinaus.
 #pagebreak()
 = Übernommene Messstatistik
@@ -70,9 +71,12 @@ Die Batterieenergie ist die an der Messspannung nutzbare Energie. Selbstentladun
 Alterung und Änderungen des Gerätezustands sind nicht modelliert.
 Das Szenarioband ist kein Konfidenzintervall und keine kalibrierte Wahrscheinlichkeit
 der tatsächlichen Batterielaufzeit. Bei nur einem gültigen Zyklus ist keine Streuungsauswertung möglich.
-Es wird keine Normalverteilung angenommen. Schiefe und mehrgipflige Verteilungen
-bleiben sichtbar. P5–P95 sind interpolierte empirische Perzentile; bei wenigen Szenarien
+Die Kurve verwendet eine gewichtete Kerndichtesch?tzung mit Randspiegelung und
+Normierung innerhalb der gemessenen Min/Max-Grenzen. Die Gl?ttung h?ngt von der
+Streuung und der effektiven Stichprobengr??e ab. Besonders bei wenigen Zyklen
+h?ngt die Kurvenform stark von der Gl?ttung ab. Es wird keine Normalverteilung
+der Laufzeiten vorausgesetzt. P5–P95 sind interpolierte empirische Perzentile; bei wenigen Szenarien
 enthält dieses Intervall nicht zwingend genau 90 % des Gewichts.
 Die Achse skaliert automatisch. Kapazitätsänderungen verschieben die Laufzeitwerte,
-können aber eine ähnliche Balkenform ergeben. Bei langen Sleep-Dauern dominiert die Sleep-Leistung.
+können aber eine ähnliche Kurvenform ergeben. Bei langen Sleep-Dauern dominiert die Sleep-Leistung.
 Bei null Streuung oder weniger als zwei gültigen Zyklen wird eine Laufzeitmarkierung gezeigt.

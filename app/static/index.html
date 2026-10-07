@@ -81,9 +81,9 @@
           <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
         </div>
         <div class="card chart-card battery-chart-card">
-          <div class="card-title-row"><div><h3>Laufzeitverteilung für deine Einstellung</h3><p>Gewichtete Messszenarien innerhalb ihrer Min/Max-Grenzen</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
+          <div class="card-title-row"><div><h3>Laufzeitverteilung für deine Einstellung</h3><p>Gegl?ttete Messszenarien innerhalb ihrer Min/Max-Grenzen</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
           <div class="battery-result-grid"><div><span>Laufzeit aus mittlerer Leistung</span><strong id="batteryRuntime">—</strong></div><div><span>Empirische Perzentile · P5–P95</span><strong id="batteryBand">—</strong></div><div><span>Erwartete Leistung</span><strong id="batteryPower">—</strong></div></div>
-          <div id="batteryChart" class="chart large-chart" aria-label="Gewichtete Laufzeitverteilung gemessener Szenarien mit Min/Max und Perzentilen"></div>
+          <div id="batteryChart" class="chart large-chart" aria-label="Gegl?ttete Laufzeitverteilung gemessener Szenarien mit Min/Max und Perzentilen"></div>
           <p id="batteryDistributionNote" class="form-hint"></p>
           <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
         </div>
@@ -355,6 +355,6 @@
 <script src="/static/cycle-energy.js?v=1.0.6-wake-variance"></script>
 <script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/battery-life.js?v=1.0.6-battery-empirical"></script>
+<script src="/static/battery-life.js?v=1.0.6-battery-density"></script>
 <script src="/static/app.js?v=1.0.6-battery-life"></script>
 </body></html>
