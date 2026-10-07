@@ -222,6 +222,37 @@ Windows-COM-Ports sind im Linux-Container nicht direkt verfügbar.
 
 Stoppen mit `docker compose down`. Mit `down -v` werden auch die Daten-Volumes gelöscht.
 
+## Docker-Image auf GitHub bauen
+
+Der Workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) baut
+das Linux-Image (`linux/amd64`) auf einem GitHub-Runner. Ein Container-Starttest
+prueft den Healthcheck und die Geraete-API ohne angeschlossenes PPK2.
+
+- Pull Requests nach `main`: Image bauen und testen.
+- Push nach `main`: nach erfolgreichem Test nach GHCR hochladen, mit `latest`
+  und einem Commit-Tag (`sha-...`).
+- Versionstags wie `v1.0.6`: nach erfolgreichem Test als `1.0.6` und mit
+  Commit-Tag hochladen. `latest` bleibt beim Stand von `main`.
+- Manuell unter GitHub **Actions > Docker image > Run workflow** starten.
+  Hochgeladen wird nur von der Standardbranch oder einem `v`-Tag.
+
+Der Image-Name wird automatisch aus dem Repository abgeleitet. Fuer
+`CarlKuhligk/powerlab` lautet er `ghcr.io/carlkuhligk/powerlab`.
+Der Workflow nutzt den bereitgestellten `GITHUB_TOKEN`; zusaetzliche Secrets
+oder ein CI-Tool auf dem Windows-PC sind nicht erforderlich.
+
+Auf einem anderen PC mit Docker das fertige Image starten:
+
+```powershell
+docker run -d --name powerlab --restart unless-stopped -p 8889:8889 -v powerlab_data:/data ghcr.io/carlkuhligk/powerlab:latest
+```
+
+Die Weboberflaeche ist danach unter http://localhost:8889 erreichbar.
+Bei einem privaten GHCR-Paket ist vorher eine Registry-Anmeldung erforderlich;
+fuer einen Download ohne Anmeldung muss das Paket auf GitHub oeffentlich sein.
+Das PPK2-Messinterface muss wie oben beschrieben an den Container durchgereicht
+werden. Das Image enthaelt keine vorhandenen Messdaten.
+
 ## Windows-Setup
 
 Getesteter Zielpfad: Windows + Python 3.14.

@@ -1,0 +1,110 @@
+name: Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v')) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha
+          flavor: latest=false
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test container startup
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_tag="${IMAGE_TAGS%%$'\n'*}"
+          docker run --detach --name powerlab-smoke "$image_tag"
+          for attempt in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' powerlab-smoke)
+            if [ "$status" = healthy ]; then
+              docker exec powerlab-smoke python -c "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8889/api/devices', timeout=5); assert isinstance(json.load(response)['ppk2'], list)"
+              exit 0
+            fi
+            if [ "$status" = unhealthy ] || [ "$(docker inspect --format '{{.State.Running}}' powerlab-smoke)" != true ]; then
+              break
+            fi
+            sleep 2
+          done
+          docker logs powerlab-smoke
+          docker inspect powerlab-smoke
+          exit 1
+
+      - name: Container logs and cleanup
+        if: always()
+        shell: bash
+        run: |
+          if docker container inspect powerlab-smoke > /dev/null 2>&1; then
+            docker logs powerlab-smoke
+            docker rm --force powerlab-smoke
+          fi
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish tested image
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r image_tag; do
+            docker push "$image_tag"
+          done <<< "$IMAGE_TAGS"
