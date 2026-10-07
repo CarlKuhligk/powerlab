@@ -22,10 +22,11 @@ Erstellt: #report.generated
 #rows-table(report.setup + report.results)
 = Laufzeitverteilung für die gewählte Einstellung
 #image("chart.png", width: 100%)
-Blau: Normalmodell um die erwartete Laufzeit (Batterieenergie / erwartete Leistung).
-Diese liegt in der Mitte der x-Achse. Goldene Linie: empirischer Median.
-Helle Fläche: beobachtetes Min/Max; dunklere Fläche: zentrales 90-%-Modellintervall P5–P95.
-Die x-Achse zeigt Laufzeit in automatisch gewählten Einheiten, die y-Achse Dichte.
+Blau: gewichtete Anteile gemessener Verbrauchsszenarien in Laufzeitbereichen.
+Grün: Laufzeit aus mittlerer Leistung. Goldene Linie: empirischer Median.
+Helle Fläche: beobachtetes Min/Max; dunklere Fläche: empirisches P5–P95-Intervall.
+Die x-Achse zeigt Laufzeit in automatisch gewählten Einheiten, die y-Achse Szenarioanteile in Prozent.
+Die Verteilung reicht nicht über die Min/Max-Grenzen der gemessenen Szenarien hinaus.
 #pagebreak()
 = Übernommene Messstatistik
 Gewichtung: #report.weighting.
@@ -48,7 +49,7 @@ mindestens zwei gültige Zyklen sind erforderlich.
     columns: (1.5fr, 1fr, 1fr, 1fr, 1fr, 1fr))
 ]
 = Laufzeit-Perzentile für die gewählte Einstellung
-#rows-table(report.percentiles, headers: ("Perzentil", "Quantilniveau", "Normalmodell", "Gemessene Szenarien"), columns: (0.8fr, 0.7fr, 1.3fr, 1.3fr))
+#rows-table(report.percentiles, headers: ("Perzentil", "Quantilniveau", "Gemessene Szenarien"), columns: (0.8fr, 0.7fr, 1.3fr))
 Die Spalte „Gemessene Szenarien“ beschreibt entsprechend den gewählten Messungsanteilen gewichtete
 Szenarien aus den beobachteten Sleep-/Wake-Paaren. Bei mehreren Messungen wird an
 den Mittelpunkten der kumulierten Gewichte linear interpoliert.
@@ -69,11 +70,9 @@ Die Batterieenergie ist die an der Messspannung nutzbare Energie. Selbstentladun
 Alterung und Änderungen des Gerätezustands sind nicht modelliert.
 Das Szenarioband ist kein Konfidenzintervall und keine kalibrierte Wahrscheinlichkeit
 der tatsächlichen Batterielaufzeit. Bei nur einem gültigen Zyklus ist keine Streuungsauswertung möglich.
-Das Normalmodell ist keine nachgewiesene Normalverteilung. Es wird um die erwartete
-Laufzeit zentriert; seine Standardabweichung stammt aus der gemessenen Szenariostreuung.
-Unter dieser Normalannahme liegen 90 % zwischen P5 und P95.
-Bei schiefen oder mehrgipfligen Daten ist dies nur eine vereinfachte Darstellung.
-Modell-Perzentile und empirische Szenario-Perzentile stehen getrennt in der Tabelle.
-Negative Modellgrenzen sind unphysikalisch; ein Modell mit negativer P5-Grenze ist
-hier keine belastbare 90-%-Prognose der Laufzeit.
-Bei null Streuung oder weniger als zwei gültigen Zyklen wird eine Laufzeitmarkierung statt einer Glockenkurve gezeigt.
+Es wird keine Normalverteilung angenommen. Schiefe und mehrgipflige Verteilungen
+bleiben sichtbar. P5–P95 sind interpolierte empirische Perzentile; bei wenigen Szenarien
+enthält dieses Intervall nicht zwingend genau 90 % des Gewichts.
+Die Achse skaliert automatisch. Kapazitätsänderungen verschieben die Laufzeitwerte,
+können aber eine ähnliche Balkenform ergeben. Bei langen Sleep-Dauern dominiert die Sleep-Leistung.
+Bei null Streuung oder weniger als zwei gültigen Zyklen wird eine Laufzeitmarkierung gezeigt.

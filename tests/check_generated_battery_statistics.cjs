@@ -19,20 +19,13 @@ for(const c of cases){
   const d=context.model.distribution(data,c.energy_wh,c.mode,c.value),p=d.point;
   for(const [a,b] of [['expectedH','expected_h'],['powerUw','power_uw'],['sleepS','sleep_s'],['dutyPct','duty_pct'],['scenariosH','scenarios_h']])close(p[a],e[b],`${c.name}.${a}`);
   for(const [a,b] of [['minH','0'],['p05H','5'],['lowH','10'],['medianH','50'],['highH','90'],['p95H','95'],['maxH','100']])close(p[a],e.percentiles[b],`${c.name}.${a}`);
-  for(const [a,b] of [['meanH','mean_h'],['stddevH','stddev_h'],['varianceH2','variance_h2'],['modelPercentiles','percentiles_h']])close(d[a],e[b],`${c.name}.${a}`);
+  for(const [a,b] of [['meanH','mean_h'],['stddevH','stddev_h'],['varianceH2','variance_h2'],['bins','bins']])close(d[a],e[b],`${c.name}.${a}`);
   if(c.name.startsWith('constant')||c.name.startsWith('single')){
-    if(d.curve.length)throw Error(`${c.name}: fabricated bell curve for constant/single cycle`);
+    if(d.bins.length)throw Error(`${c.name}: fabricated spread for constant/single cycle`);
   }else{
-    close(d.curve[120].hours,e.expected_h,`${c.name}.curve-center`);
-    close(d.curve[120].densityPerHour,1/(e.stddev_h*Math.sqrt(2*Math.PI)),`${c.name}.density-peak`);
-    // Simpson integration verifies the shaded interval has 90% Gaussian mass.
-    const lo=d.modelPercentiles['5'],hi=d.modelPercentiles['95'],step=(hi-lo)/1000;
-    let integral=0;
-    for(let i=0;i<=1000;i++){
-      const z=(lo+i*step-d.meanH)/d.stddevH;
-      integral+=(i===0||i===1000?1:i%2?4:2)*Math.exp(-z*z/2)/(d.stddevH*Math.sqrt(2*Math.PI));
-    }
-    close(integral*step/3,.9,`${c.name}.central-probability`);
+    close(d.bins[0].leftH,e.percentiles['0'],`${c.name}.lower-bound`);
+    close(d.bins.at(-1).rightH,e.percentiles['100'],`${c.name}.upper-bound`);
+    close(d.bins.reduce((a,b)=>a+b.share,0),1,`${c.name}.total-share`);
   }
 }
 console.log(`${cases.length} cases, ${checks} independent numeric comparisons passed.`);

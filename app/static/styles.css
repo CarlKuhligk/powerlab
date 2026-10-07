@@ -196,6 +196,25 @@ button:disabled{opacity:.45;cursor:default}
 #detailView .event-open:focus-visible{outline:2px solid var(--detail-accent);outline-offset:3px}
 #detailView .wake-event-table-card tbody tr.selected{background:#aebdcd0d;box-shadow:inset 3px 0 var(--detail-neutral)}
 #detailView .wake-event-table-card tbody tr.selected td{color:var(--text)}
+#detailView .sleep-analysis-card{margin-top:14px;border-top:2px solid var(--detail-sleep)}
+#detailView .sleep-analysis-card>.card-title-row{margin:0;padding:16px 18px;border-bottom:1px solid var(--line)}
+#detailView .sleep-analysis-card h3,#detailView .sleep-analysis-card h4{color:var(--detail-sleep)}
+#detailView .sleep-analysis-card .card-title-row>div{min-width:0}
+#detailView .sleep-analysis-card .card-title-row button{flex-shrink:0}
+#detailView .sleep-analysis-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:18px;margin:0}
+#detailView .sleep-analysis-kpis .kpi{background:#ffffff02;border-radius:8px;padding:14px;min-width:0}
+#detailView .sleep-analysis-kpis .kpi span{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.5}
+#detailView .sleep-analysis-kpis .kpi strong{font-size:21px;line-height:1.3;color:var(--detail-sleep);white-space:normal;overflow:visible;overflow-wrap:anywhere}
+#detailView .sleep-phase-heading{padding:0 18px 14px}
+#detailView .sleep-phase-heading h4{margin-bottom:6px}
+#detailView .sleep-phase-heading .form-hint{margin:0;font-size:12px;line-height:1.6;color:#a1acb7}
+#detailView .sleep-analysis-card .event-count{background:#60a5fa12;color:var(--detail-sleep);border-color:#60a5fa30}
+#detailView .sleep-analysis-card .event-scroll{max-height:420px;border-top:1px solid var(--line)}
+#detailView .sleep-analysis-card thead th{position:sticky;top:0;z-index:3;background:#11161b;white-space:nowrap;box-shadow:0 1px 0 var(--line)}
+#detailView .sleep-analysis-card td{white-space:nowrap}
+#detailView .sleep-analysis-card tbody tr:hover{cursor:default}
+@media(max-width:780px){#detailView .sleep-analysis-card>.card-title-row{flex-wrap:wrap}#detailView .sleep-analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){#detailView .sleep-analysis-card>.card-title-row{padding:14px}#detailView .sleep-analysis-card .card-title-row button{width:100%}#detailView .sleep-analysis-kpis{gap:10px;padding:14px}#detailView .sleep-analysis-kpis .kpi{padding:12px}#detailView .sleep-analysis-kpis .kpi strong{font-size:18px}#detailView .sleep-phase-heading{padding:0 14px 14px}}
 #detailView .cycle-energy-card{margin-top:14px;border-top:2px solid var(--detail-energy)}
 #detailView .cycle-energy-card h3{color:var(--detail-energy);font-size:15px}
 #detailCycleCount{font-size:11px;color:#bdacd8;white-space:nowrap}

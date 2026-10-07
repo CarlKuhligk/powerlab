@@ -57,7 +57,7 @@ def test_multi_pdf_records_normalized_weights_and_rejects_invalid_sources(tmp_pa
     data = report_data_many(measurements, BatteryMultiReportRequest(**body))
     assert data['weighting'] == 'Eigene Gewichte je Messung'
     assert [s[4] for s in data['sources']] == ['70,000 %', '30,000 %']
-    assert all(len(row) == 4 for row in data['percentiles'])
+    assert all(len(row) == 3 for row in data['percentiles'])
     assert any('P5' in row[0] for row in data['results'])
     with TestClient(create_app(settings)) as client:
         monkeypatch.setattr(client.app.state.manager, 'get_measurement', lambda mid: next(m for m in measurements if m['id'] == mid))

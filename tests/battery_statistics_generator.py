@@ -98,6 +98,12 @@ def reference(sources, weighting, energy, mode, value):
     sigma = scatter['stddev']
     normal = {str(p): float(expected+NormalDist().inv_cdf(p/100)*sigma)
               if sigma is not None else None for p in [5, 10, 50, 90, 95]}
+    bins = []
+    if scenarios.min() != scenarios.max():
+        count = min(30, max(2, int(np.ceil(np.sqrt(len(scenarios))))))
+        mass, edges = np.histogram(scenarios, bins=count, weights=weights/weights.sum())
+        bins = [dict(leftH=float(edges[i]), rightH=float(edges[i+1]), share=float(mass[i]))
+                for i in range(count)]
     return dict(shares=shares.tolist(), count=len(wake_s), wake_s=mean_wake,
                 wake_energy_uwh=mean_energy, sleep_power_uw=float(mean_sleep_power),
                 statistics=dict(wake_energy=statistics(wake_energy, weights),
@@ -107,7 +113,7 @@ def reference(sources, weighting, energy, mode, value):
                 duty_pct=float(100*mean_wake/(mean_wake+planned)),
                 scenarios_h=scenarios.tolist(), percentiles=empirical,
                 mean_h=float(expected), stddev_h=sigma, variance_h2=scatter['variance'],
-                percentiles_h=normal)
+                percentiles_h=normal, bins=bins)
 
 
 def generate(seed=20261007):

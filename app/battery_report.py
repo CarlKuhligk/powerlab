@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .battery_life import combine, evaluate, measured_statistics, normal_approximation, profile
+from .battery_life import combine, evaluate, measured_statistics, weighted_statistics, profile
 from .report import date, number
 
 TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
@@ -17,7 +17,9 @@ TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
 def report_data(measurement, summary, request, combined=None):
     data = combined if combined is not None else profile(summary)
     point = evaluate(data, request.energy_wh, request.mode, request.value)
-    normal = normal_approximation(data, request.energy_wh, request.mode, request.value)
+    finite_scenarios = all(math.isfinite(v) for v in point['scenarios_h'])
+    scatter = (weighted_statistics(point['scenarios_h'], data.get('weights', [1/data['count']]*data['count']))
+               if finite_scenarios else {'stddev': None, 'variance': None})
     statistics = data['statistics'] if combined is not None else measured_statistics(summary)
     def lifetime(hours):
         if not math.isfinite(hours):
@@ -26,8 +28,6 @@ def report_data(measurement, summary, request, combined=None):
                         else (168, 'Wochen') if hours >= 336 else (24, 'Tage') if hours >= 48
                         else (1, 'h'))
         return number(hours / factor, unit, 6)
-    def model_lifetime(hours):
-        return '—' if hours is None else 'Modellgrenze < 0 (unphysikalisch)' if hours < 0 else lifetime(hours)
     return {
         'name': measurement['name'], 'id': measurement['id'],
         'generated': date(datetime.now(timezone.utc).isoformat()),
@@ -46,18 +46,19 @@ def report_data(measurement, summary, request, combined=None):
                   ['Wake-Duty-Cycle', number(point['duty_pct'], '%', 6)]],
         'results': [['Erwartete Laufzeit', lifetime(point['expected_h'])],
                     ['Erwartete Leistung', number(point['power_uw'], 'µW', 6)],
-                    ['Mitte des Normalmodells · erwartete Laufzeit', lifetime(normal['mean_h']) if normal['mean_h'] is not None else '—'],
-                    ['Standardabweichung der Szenario-Laufzeiten', lifetime(normal['stddev_h']) if normal['stddev_h'] is not None else '—'],
-                    ['Varianz der Szenario-Laufzeiten', number(normal['variance_h2']/576 if normal['variance_h2'] is not None else None, 'd²', 9)],
-                    ['90-%-Modellintervall · untere Grenze P5', model_lifetime(normal['percentiles_h'].get('5'))],
-                    ['90-%-Modellintervall · obere Grenze P95', model_lifetime(normal['percentiles_h'].get('95'))]],
+                    ['Standardabweichung der Szenario-Laufzeiten', lifetime(scatter['stddev']) if scatter['stddev'] is not None else '—'],
+                    ['Varianz der Szenario-Laufzeiten', number(scatter['variance']/576 if scatter['variance'] is not None else None, 'd²', 9)],
+                    ['Empirische untere Grenze P5', lifetime(point['percentiles']['5']) if data['count'] > 1 else 'Ab zwei gültigen Zyklen'],
+                    ['Empirische obere Grenze P95', lifetime(point['percentiles']['95']) if data['count'] > 1 else 'Ab zwei gültigen Zyklen'],
+                    ['Kürzeste gemessene Szenario-Laufzeit', lifetime(point['percentiles']['0'])],
+                    ['Längste gemessene Szenario-Laufzeit', lifetime(point['percentiles']['100'])]],
         'statistics': [[label] + [number(statistics[key].get(field), unit + ('²' if field == 'variance' else ''), 6)
                                    for field in ['mean', 'min', 'max', 'stddev', 'variance']]
                        for label, key, unit in [('Wake-Energie', 'wake_energy', 'µWh'),
                                                  ('Sleep-Energie · gemessen', 'sleep_energy', 'µWh'),
                                                  ('Sleep-Leistung · normiert', 'sleep_power', 'µW')]],
         'percentiles': [[('Minimum' if p == 0 else 'Maximum' if p == 100 else 'Median · P50' if p == 50 else f'P{p}'),
-                         f'{p} %', model_lifetime(normal['percentiles_h'].get(key)),
+                         f'{p} %',
                          lifetime(value) if data['count'] > 1 or p == 50 else 'Ab zwei gültigen Zyklen']
                         for key, value in point['percentiles'].items() for p in [int(key)]],
     }
