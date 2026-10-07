@@ -222,6 +222,209 @@ Windows-COM-Ports sind im Linux-Container nicht direkt verfügbar.
 
 Stoppen mit `docker compose down`. Mit `down -v` werden auch die Daten-Volumes gelöscht.
 
+### USB-Freigabe unter Ubuntu/Linux
+
+Das PPK2 muss am Ubuntu-Host angeschlossen sein. Läuft Ubuntu in einer VM,
+muss das USB-Gerät zuerst an diese VM durchgereicht werden.
+
+Auf dem Host die seriellen USB-Ports anzeigen:
+
+```bash
+ls -l /dev/serial/by-id/
+```
+
+Für PowerLab das PPK2-Mess-/Control-Interface `01` verwenden. Der passende
+Eintrag enthält üblicherweise `if01`; sein Linkziel zeigt beispielsweise auf
+`/dev/ttyACM0`. Die Portnummer ist nicht fest vorgegeben.
+
+Unter `services` → `powerlab` in `docker-compose.yml` ergänzen beziehungsweise
+den vorhandenen kommentierten Eintrag aktivieren:
+
+```yaml
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0:rwm"
+```
+
+Den tatsächlichen Gerätepfad auf beiden Seiten eintragen. Den ursprünglichen
+Portnamen im Container beibehalten, damit die USB-Metadaten zur Geräteerkennung
+zugeordnet werden können. Die Compose-Option ist in der
+[Docker-Dokumentation zu devices](https://docs.docker.com/reference/compose-file/services/#devices)
+beschrieben.
+
+Nach der Änderung den Container neu erstellen und die Weboberfläche neu laden:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+Die Erkennung im Container lässt sich unabhängig von der Weboberfläche prüfen:
+
+```bash
+docker compose exec powerlab python -m serial.tools.list_ports -v
+```
+
+Wenn bereits auf dem Host kein serieller Eintrag vorhanden ist, mit
+`lsusb -d 1915:c00a` prüfen, ob das PPK2 überhaupt am Host erkannt wird.
+Nach Abziehen und erneutem Einstecken kann sich die Portnummer ändern.
+Dann die Zuordnung erneut prüfen, gegebenenfalls anpassen und den Container
+neu erstellen.
+
+### SerialException: Permission denied
+
+Der Fehler `could not open port /dev/ttyACM0: [Errno 13] Permission denied`
+bedeutet, dass der Prozess den Geräteport nicht öffnen darf. Läuft der
+Container unter einem normalen Benutzer, benötigt dieser die Gruppe des
+Geräteports. Auf dem Ubuntu-Host die Gruppe, ihre numerische ID und die Rechte
+ermitteln (Gerätepfad gegebenenfalls anpassen):
+
+```bash
+stat -c 'Gruppe=%G GID=%g Rechte=%A' /dev/ttyACM0
+```
+
+Wenn beispielsweise `Gruppe=dialout GID=20 Rechte=crw-rw----` ausgegeben wird,
+unter `services` → `powerlab` ergänzen:
+
+```yaml
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0:rwm"
+    group_add:
+      - "20"
+```
+
+Die `20` durch die tatsächlich ausgegebene GID ersetzen. Die numerische ID
+vermeidet eine Abhängigkeit von Gruppennamen im Image.
+[`group_add`](https://docs.docker.com/reference/compose-file/services/#group_add)
+fügt die Gruppe dem Benutzer im Container hinzu. Voraussetzung ist, dass die
+Gruppe am Geräteport Lese- und Schreibrechte hat.
+
+Danach `docker compose up -d --force-recreate` ausführen und die Messung erneut
+starten. Falls der Fehler bestehen bleibt, Benutzer und Portrechte im
+Container prüfen:
+
+```bash
+docker compose exec powerlab id
+docker compose exec powerlab ls -ln /dev/ttyACM0
+```
+
+Das Dockerfile dieses Projekts startet standardmäßig als `root`. Zeigt `id`
+bereits `uid=0`, reicht eine zusätzliche Gruppe als Diagnose nicht aus.
+Dann die wirksame Compose-Konfiguration (`docker compose config`), die
+Gerätefreigabe und eine mögliche Rootless-/User-Namespace-Konfiguration des
+Docker-Daemons prüfen.
+
+### USB-Zugriff mit Rootless Podman
+
+Bei Podman ohne `sudo` gelten zusätzlich die Rechte des Benutzers auf dem Host.
+`root` im Container hat dabei keine Root-Rechte auf dem Host. Eine numerische
+Host-GID unter `group_add` allein erhält wegen der Benutzerzuordnung nicht die
+Host-Gruppenrechte.
+
+Zuerst auf dem Ubuntu-Host prüfen:
+
+Die Befehle in der Sitzung des normalen Benutzers ausführen, der PowerLab mit
+Podman betreibt. `/dev/ttyACM0` in allen Beispielen durch den zuvor ermittelten
+PPK2-Messport ersetzen.
+
+```bash
+ls -l /dev/ttyACM0
+id
+podman info --format 'Rootless={{.Host.Security.Rootless}} Runtime={{.Host.OCIRuntime.Name}}'
+```
+
+Ein typisches Ergebnis ist:
+
+```text
+crw-rw---- 1 root dialout 166, 0 ... /dev/ttyACM0
+uid=1000(benutzer) gid=1000(benutzer) groups=1000(benutzer),27(sudo),...
+Rootless=true Runtime=crun
+```
+
+Hier dürfen nur der Host-Benutzer `root` und Mitglieder von `dialout` den Port
+lesen und schreiben. Fehlt `dialout` in der Ausgabe von `id`, hat der aktuelle
+Benutzer keinen Zugriff. `Rootless=true Runtime=crun` bestätigt die
+Voraussetzungen für die folgende Compose-Einstellung.
+
+Gehört der Port beispielsweise `dialout`, muss der Benutzer, der Podman startet,
+Mitglied dieser Gruppe sein. Falls die Gruppe fehlt:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+`$USER` steht für den aktuell angemeldeten Benutzer; ein konkreter Benutzername
+muss nicht eingetragen werden. Den Befehl aus dessen normaler Sitzung ausführen,
+nicht aus einer Root-Shell. Falls der Port einer anderen Gruppe gehört, `dialout`
+durch diese Gruppe ersetzen. `-aG` ergänzt die Gruppe und behält bestehende
+Gruppenzugehörigkeiten bei.
+
+Danach vollständig abmelden und neu anmelden (bei SSH die Verbindung neu
+aufbauen). Die aktive Gruppenzugehörigkeit erneut prüfen:
+
+```bash
+id
+```
+
+Die Geräte-Gruppe, beispielsweise `dialout`, muss jetzt in der Ausgabe stehen.
+Eine erfolgreiche Prüfung sieht beispielsweise so aus:
+
+```text
+uid=1000(benutzer) gid=1000(benutzer) groups=1000(benutzer),20(dialout),...
+```
+
+Bleibt `dialout` nach `usermod` in der Ausgabe aus, ist die neue Gruppe in
+dieser Sitzung noch nicht aktiv. Ein weiteres Terminal in einer bestehenden
+Anmeldung genügt nicht unbedingt; bei SSH die Verbindung vollständig trennen
+und neu verbinden.
+
+Erst danach den Container neu erstellen, damit Podman die neue Gruppe übernimmt.
+
+Für Rootless Podman mit der OCI-Runtime `crun` die bisherigen numerischen
+`group_add`-Einträge durch `keep-groups` ersetzen:
+
+```yaml
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0:rwm"
+    group_add:
+      - keep-groups
+```
+
+`keep-groups` erhält die zusätzlichen Gruppen des aufrufenden Host-Prozesses.
+Es benötigt `crun` und darf nicht mit weiteren `group_add`-Einträgen kombiniert
+werden; siehe [Podman-Dokumentation](https://docs.podman.io/en/latest/markdown/podman-create.1.html#group-add-group-keep-groups).
+
+`group_add` muss unter `services` → `powerlab` auf derselben Einrückungsebene
+wie `devices` stehen und darf nicht auskommentiert sein. Beide Voraussetzungen
+sind erforderlich: Die aktive Host-Sitzung enthält die Geräte-Gruppe und die
+Compose-Konfiguration erhält diese über `keep-groups`.
+
+Den Container im Verzeichnis der Compose-Datei als derselbe Host-Benutzer
+**ohne `sudo`** neu erstellen. Liegt das Projekt beispielsweise in
+`~/powerlab`, zuerst dorthin wechseln. Mit `config` die tatsächlich verwendete
+Konfiguration prüfen; im Abschnitt `powerlab` muss `group_add: [keep-groups]`
+stehen (gegebenenfalls als mehrzeilige YAML-Liste):
+
+```bash
+cd ~/powerlab
+podman compose config
+podman compose up -d --force-recreate
+podman inspect powerlab --format 'GroupAdd={{json .HostConfig.GroupAdd}}'
+```
+
+`~/powerlab` durch das eigene Projektverzeichnis ersetzen. Die letzte Ausgabe
+dient zur Kontrolle der gespeicherten Container-Konfiguration. Zeigt sie
+`GroupAdd=[]`, obwohl `keep-groups` in der aufgelösten Compose-Konfiguration
+steht, die Ausgabe des Neuerstellens und die Provider-Version zur weiteren
+Diagnose festhalten. Die Host-Mitgliedschaft in `dialout` allein bestätigt
+noch nicht den Zugriff des Containers.
+
+Anschließend die PowerLab-Weboberfläche neu laden und die Messung erneut starten.
+
+Falls der Fehler bestehen bleibt, die oben genannten Host-Ausgaben sowie
+`podman exec powerlab ls -ln /dev/ttyACM0` zur Diagnose verwenden. Meldet der
+Compose-Provider einen Fehler zu `keep-groups`, diesen ebenfalls festhalten.
+Die verwendeten Versionen lassen sich mit `podman --version` und, beim
+Provider `podman-compose`, mit `podman-compose --version` ermitteln.
+
 ## Docker-Image auf GitHub bauen
 
 Der Workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) baut

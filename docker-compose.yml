@@ -15,9 +15,18 @@ services:
       POWERLAB_DATABASE_URL: sqlite:////data/powerlab.db
     volumes:
       - powerlab_data:/data
-    # Linux: uncomment and adjust to the PPK2 measurement interface.
+    # Linux: uncomment and adjust to the PPK2 measurement interface (if01).
+    # See README: USB-Freigabe unter Ubuntu/Linux / Permission denied.
     # devices:
-    #   - /dev/ttyACM1:/dev/ttyACM1
+    #   - /dev/ttyACM1:/dev/ttyACM1:rwm
+    # For a non-root container user, add the device's numeric group ID:
+    # stat -c '%g' /dev/ttyACM1
+    # group_add:
+    #   - "20"  # Replace with the actual GID from the host.
+    # Rootless Podman with crun: use keep-groups instead of the numeric GID.
+    # The host user must already belong to the device's group (see README).
+    # group_add:
+    #   - keep-groups
 
 volumes:
   powerlab_data:
