@@ -10,16 +10,21 @@ class BatteryReportRequest(BaseModel):
     energy_wh: float = Field(gt=0, le=1e12, allow_inf_nan=False)
     mode: Literal['sleep', 'duty']
     value: float = Field(ge=0, le=1e12, allow_inf_nan=False)
-    range_min: float = Field(ge=0, le=1e12, allow_inf_nan=False)
-    range_max: float = Field(gt=0, le=1e12, allow_inf_nan=False)
+    # Optional only for compatibility with the previous timing-curve export.
+    range_min: float | None = Field(default=None, ge=0, le=1e12, allow_inf_nan=False)
+    range_max: float | None = Field(default=None, gt=0, le=1e12, allow_inf_nan=False)
     chart_png: str = Field(max_length=6_000_000, pattern=r'^data:image/png;base64,')
 
     @model_validator(mode='after')
     def validate_range(self):
-        if not self.range_min <= self.value <= self.range_max or self.range_min >= self.range_max:
-            raise ValueError('Einstellung muss innerhalb eines gültigen Kurvenbereichs liegen.')
-        if self.mode == 'duty' and (self.range_min <= 0 or self.range_max > 100):
+        if self.mode == 'duty' and not 0 < self.value <= 100:
             raise ValueError('Duty-Cycle muss über 0 bis 100 % liegen.')
+        if self.range_min is not None or self.range_max is not None:
+            if (self.range_min is None or self.range_max is None
+                    or not self.range_min <= self.value <= self.range_max or self.range_min >= self.range_max):
+                raise ValueError('Einstellung muss innerhalb eines gültigen Kurvenbereichs liegen.')
+            if self.mode == 'duty' and (self.range_min <= 0 or self.range_max > 100):
+                raise ValueError('Duty-Cycle muss über 0 bis 100 % liegen.')
         return self
 
 

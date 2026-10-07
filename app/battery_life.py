@@ -29,7 +29,9 @@ def weighted_percentile(values, weights, fraction):
 
 
 def weighted_statistics(values, weights):
-    average = sum(v * w for v, w in zip(values, weights))
+    # Center before summing so identical observations retain exactly zero spread.
+    origin = values[0]
+    average = origin + math.fsum((v - origin) * w for v, w in zip(values, weights))
     correction = 1 - sum(w * w for w in weights)
     spread = sum(w * (v - average)**2 for v, w in zip(values, weights)) / correction if correction > 1e-15 else None
     return {'mean': average, 'min': min(values), 'max': max(values), 'variance': spread,
@@ -107,11 +109,23 @@ def evaluate(data, energy_wh, mode, value):
     for s in data['samples']:
         planned = value if mode == 'sleep' else s['wake_s'] * (100 / value - 1)
         scenarios.append(hours((s['wake_energy_uwh'] * 3600 + s['sleep_power_uw'] * planned) / (s['wake_s'] + planned)))
-    return {'expected_h': hours(power), 'power_uw': power, 'sleep_s': sleep_s,
+    return {'expected_h': hours(power), 'power_uw': power, 'sleep_s': sleep_s, 'scenarios_h': scenarios,
             'duty_pct': 100 * data['wake_s'] / (data['wake_s'] + sleep_s),
             'percentiles': {str(p): (weighted_percentile(scenarios, data['weights'], p / 100)
                                      if 'weights' in data else percentile(scenarios, p / 100))
                             for p in [0, 5, 10, 50, 90, 95, 100]}}
+
+
+def normal_approximation(data, energy_wh, mode, value):
+    point = evaluate(data, energy_wh, mode, value)
+    if not all(math.isfinite(v) for v in point['scenarios_h']):
+        return {'mean_h': None, 'stddev_h': None, 'variance_h2': None, 'percentiles_h': {}}
+    stats = weighted_statistics(point['scenarios_h'], data.get('weights', [1 / data['count']] * data['count']))
+    z = {5: -1.6448536269514722, 10: -1.2815515655446004, 50: 0,
+         90: 1.2815515655446004, 95: 1.6448536269514722}
+    return {'mean_h': point['expected_h'], 'stddev_h': stats['stddev'], 'variance_h2': stats['variance'],
+            'percentiles_h': {str(p): point['expected_h'] + value * stats['stddev']
+                              if stats['stddev'] is not None else None for p, value in z.items()}}
 
 
 def measured_statistics(summary):

@@ -3,7 +3,7 @@ import math
 import pytest
 from fastapi.testclient import TestClient
 
-from app.battery_life import combine, evaluate, measured_statistics, profile
+from app.battery_life import combine, evaluate, measured_statistics, normal_approximation, profile
 from app.battery_report import report_data, report_data_many
 from app.config import Settings
 from app.cycle_energy import confirmed_cycle_energy
@@ -51,12 +51,14 @@ def test_measurement_weights_change_mean_and_include_between_measurement_varianc
 
 def test_multi_pdf_records_normalized_weights_and_rejects_invalid_sources(tmp_path, monkeypatch):
     settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{tmp_path/'multi-battery.db'}")
-    body = dict(energy_wh=1, mode='sleep', value=9, range_min=1, range_max=100, chart_png=PNG,
+    body = dict(energy_wh=1, mode='sleep', value=86400, chart_png=PNG,
                 weighting='custom', sources=[{'measurement_id':'a','weight':7}, {'measurement_id':'b','weight':3}])
     measurements = [{'id':s['id'],'name':s['name'],'cycle_energy':s['summary']} for s in weighted_sources()]
     data = report_data_many(measurements, BatteryMultiReportRequest(**body))
     assert data['weighting'] == 'Eigene Gewichte je Messung'
     assert [s[4] for s in data['sources']] == ['70,000 %', '30,000 %']
+    assert all(len(row) == 4 for row in data['percentiles'])
+    assert any('P5' in row[0] for row in data['results'])
     with TestClient(create_app(settings)) as client:
         monkeypatch.setattr(client.app.state.manager, 'get_measurement', lambda mid: next(m for m in measurements if m['id'] == mid))
         response = client.post('/api/battery-report', json=body)
@@ -106,7 +108,22 @@ def test_no_cycles_rejected_and_single_cycle_does_not_invent_variance():
     events, segments, markers = fixture()
     single = confirmed_cycle_energy(10, 3300, events[:1], segments, markers)
     assert measured_statistics(single)['wake_energy']['variance'] is None
+    assert normal_approximation(profile(single), 1, 'sleep', 86400)['stddev_h'] is None
     assert evaluate(profile(single), 1, 'sleep', 10)['percentiles']['0'] == evaluate(profile(single), 1, 'sleep', 10)['percentiles']['100']
+
+
+def test_normal_model_centers_expected_runtime_and_uses_weighted_measured_scatter():
+    data = combine(weighted_sources(), 'custom')
+    point = evaluate(data, 1, 'sleep', 86400)
+    normal = normal_approximation(data, 1, 'sleep', 86400)
+    scenarios, weights = point['scenarios_h'], data['weights']
+    mean = sum(v*w for v,w in zip(scenarios, weights))
+    variance = sum(w*(v-mean)**2 for v,w in zip(scenarios, weights))/(1-sum(w*w for w in weights))
+    assert normal['mean_h'] == point['expected_h']
+    assert normal['variance_h2'] == pytest.approx(variance)
+    assert normal['percentiles_h']['5'] == pytest.approx(point['expected_h']-1.6448536269514722*math.sqrt(variance))
+    assert normal['percentiles_h']['95'] == pytest.approx(point['expected_h']+1.6448536269514722*math.sqrt(variance))
+    assert normal_approximation(data, 2, 'sleep', 86400)['stddev_h'] == pytest.approx(2*normal['stddev_h'])
 
 
 def test_battery_pdf_contains_recomputed_statistics_and_percentile_table(tmp_path, monkeypatch):

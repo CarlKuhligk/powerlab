@@ -24,7 +24,7 @@ const BatteryLifeModel=(()=>{
     return ordered.at(-1).value;
   }
   function weightedStatistics(values,weights){
-    const mean=values.reduce((n,x,i)=>n+x*weights[i],0),correction=1-weights.reduce((n,w)=>n+w*w,0);
+    const origin=values[0],mean=origin+values.reduce((n,x,i)=>n+(x-origin)*weights[i],0),correction=1-weights.reduce((n,w)=>n+w*w,0);
     const variance=correction>1e-15?values.reduce((n,x,i)=>n+weights[i]*(x-mean)**2,0)/correction:null;
     return {mean,variance,stddev:variance==null?null:Math.sqrt(variance),min:values.reduce((a,b)=>Math.min(a,b)),max:values.reduce((a,b)=>Math.max(a,b))};
   }
@@ -65,7 +65,23 @@ const BatteryLifeModel=(()=>{
     const percentile=q=>data.weights?weightedQuantile(scenarios,data.weights,q):quantile(scenarios,q);
     return {expectedH:hours(powerUw),minH:percentile(0),p05H:percentile(.05),
       lowH:percentile(.1),highH:percentile(.9),p95H:percentile(.95),maxH:percentile(1),
-      medianH:percentile(.5),powerUw,sleepS,dutyPct:100*data.wakeS/(data.wakeS+sleepS)};
+      medianH:percentile(.5),powerUw,sleepS,dutyPct:100*data.wakeS/(data.wakeS+sleepS),scenariosH:scenarios};
+  }
+  function distribution(data,energyWh,mode,value){
+    const point=evaluate(data,energyWh,mode,value);
+    if(!point.scenariosH.every(Number.isFinite))return {point,curve:[],meanH:null,stddevH:null,varianceH2:null,reason:'Mindestens ein Szenario hat keinen Verbrauch. Dafür ist keine endliche Normalapproximation möglich.'};
+    const weights=data.weights||data.samples.map(()=>1/data.count);
+    const stats=weightedStatistics(point.scenariosH,weights);
+    const meanH=point.expectedH,stddevH=stats.stddev,varianceH2=stats.variance;
+    const z={5:-1.6448536269514722,10:-1.2815515655446004,50:0,90:1.2815515655446004,95:1.6448536269514722};
+    const modelPercentiles=Object.fromEntries(Object.entries(z).map(([p,value])=>[p,stddevH==null?null:meanH+value*stddevH]));
+    if(stddevH==null||stddevH===0)return {point,meanH,stddevH,varianceH2,modelPercentiles,curve:[],reason:stddevH==null?'Für eine Glockenkurve sind mindestens zwei Zyklen mit positivem Einfluss erforderlich.':'Die Szenarien haben dieselbe Laufzeit; die Streuung ist null.'};
+    const radius=Math.max(4*stddevH,Math.abs(meanH-point.minH),Math.abs(point.maxH-meanH)),min=meanH-radius,max=meanH+radius;
+    const curve=Array.from({length:241},(_,i)=>{
+      const hours=min+(max-min)*i/240,z=(hours-meanH)/stddevH;
+      return {hours,densityPerHour:Math.exp(-.5*z*z)/(stddevH*Math.sqrt(2*Math.PI))};
+    });
+    return {point,meanH,stddevH,varianceH2,modelPercentiles,curve,reason:''};
   }
   function combine(sources,weighting='mean'){
     if(!sources.length||!['mean','cycle_count','custom'].includes(weighting))throw new Error('Bitte Messungen und eine gültige Gewichtung auswählen.');
@@ -102,7 +118,7 @@ const BatteryLifeModel=(()=>{
       return {x,...evaluate(data,energyWh,mode,x)};
     });
   }
-  return {profile,combine,evaluate,curve};
+  return {profile,combine,evaluate,curve,distribution};
 })();
 
 const BatteryLifeUI=(()=>{
@@ -116,10 +132,12 @@ const BatteryLifeUI=(()=>{
   const factor=()=>mode()==='sleep'?timeUnits[el('TimeUnit').value]:1;
   const unit=()=>mode()==='sleep'?({seconds:'s',minutes:'min',hours:'h'}[el('TimeUnit').value]):'%';
   const number=value=>value.toLocaleString('de-DE',{maximumSignificantDigits:5});
+  const modelLife=hours=>hours==null?'—':hours<0?'Modellgrenze < 0 (unphysikalisch)':life(hours);
   function status(message,error=false){el('Status').textContent=message;el('Status').classList.toggle('event-load-error',error)}
   function clear(){
     ++renderToken;clearTimeout(timer);
     for(const id of ['Runtime','Band','Power','Timing','WakeEnergy'])el(id).textContent='—';
+    el('DistributionNote').textContent='';el('MeasuredMedian').textContent='';
     el('PercentileRows').innerHTML='';el('StatisticsRows').innerHTML='';el('Export').disabled=true;
     Plotly.purge(el('Chart'));
   }
@@ -131,55 +149,58 @@ const BatteryLifeUI=(()=>{
     const typical=data?(isSleep?data.medianSleepS/factor():data.medianDutyPct):(isSleep?60/factor():1);
     const selected=Math.max(isSleep?.001:.000001,Math.min(isSleep?Infinity:100,typical));
     el('Value').value=Number(selected.toPrecision(6));
-    el('Min').value=Number((isSleep?selected/10:Math.max(.001,selected/10)).toPrecision(6));
-    el('Max').value=Number((isSleep?Math.max(selected*10,1/factor()):Math.min(100,Math.max(selected*5,10))).toPrecision(6));
     schedule();
   }
   function settings(){
-    for(const id of ['Energy','Value','Min','Max']){
+    for(const id of ['Energy','Value']){
       if(!el(id).value.trim()||!Number.isFinite(Number(el(id).value)))throw new Error('Bitte alle Eingabefelder mit gültigen Zahlen ausfüllen.');
     }
     const energyWh=Number(el('Energy').value)*(el('EnergyUnit').value==='mWh'?.001:1);
-    const min=Number(el('Min').value)*factor(),max=Number(el('Max').value)*factor(),value=Number(el('Value').value)*factor();
-    return {energyWh,min,max,value};
+    const value=Number(el('Value').value)*factor();
+    return {energyWh,value};
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(render,100)}
   function render(){
     if(!data)return;
     const token=++renderToken;
     try{
-      const {energyWh,min,max,value}=settings();
-      const curve=BatteryLifeModel.curve(data,energyWh,mode(),min,max);
-      const point=BatteryLifeModel.evaluate(data,energyWh,mode(),value);
-      if(value<min||value>max)throw new Error('Der eingestellte Wert muss innerhalb des Kurvenbereichs liegen.');
+      const {energyWh,value}=settings();
+      const distribution=BatteryLifeModel.distribution(data,energyWh,mode(),value);
+      const point=distribution.point,curve=distribution.curve;
       const median=mode()==='sleep'?data.medianSleepS:data.medianDutyPct;
-      const inside=median>=min&&median<=max;
       el('MeasuredMedian').textContent=`Gemessener Median: ${number(median/factor())} ${unit()}`;
       el('Runtime').textContent=life(point.expectedH);
-      el('Band').textContent=data.count>1?`${life(point.lowH)} bis ${life(point.highH)}`:'Ab zwei gültigen Zyklen';
+      el('Band').textContent=distribution.modelPercentiles?.['5']!=null?`${modelLife(distribution.modelPercentiles['5'])} bis ${modelLife(distribution.modelPercentiles['95'])}`:'Ab zwei gültigen Zyklen';
       el('Power').textContent=point.powerUw>=1000?`${number(point.powerUw/1000)} mW`:`${number(point.powerUw)} µW`;
       el('Timing').textContent=`Sleep ${fmtDuration(point.sleepS)} · Wake ${fmtEventDuration(data.wakeS*1e6)} · Duty ${number(point.dutyPct)} %`;
       el('WakeEnergy').textContent=fmtEnergy(data.medianWakeEnergyUwh);
-      el('PercentileRows').innerHTML=[['Minimum',0,'minH'],['P5',5,'p05H'],['P10',10,'lowH'],['Median · P50',50,'medianH'],['P90',90,'highH'],['P95',95,'p95H'],['Maximum',100,'maxH']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${data.count>1||p===50?life(point[key]):'Ab zwei gültigen Zyklen'}</td></tr>`).join('');
+      el('DistributionNote').textContent=distribution.reason||`Normalmodell um die erwartete Laufzeit ${life(distribution.meanH)}, Standardabweichung aus der gemessenen Szenariostreuung: ${life(distribution.stddevH)}. Das zentrale 90-%-Modellintervall liegt zwischen P5 und P95.${distribution.modelPercentiles['5']<0?' Die negative P5-Grenze ist unphysikalisch; dieses Normalmodell eignet sich hier nicht als belastbare Laufzeitprognose.':''}`;
+      el('PercentileRows').innerHTML=[['Minimum',0,'minH'],['P5',5,'p05H'],['P10',10,'lowH'],['P50',50,'medianH'],['P90',90,'highH'],['P95',95,'p95H'],['Maximum',100,'maxH']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${modelLife(distribution.modelPercentiles?.[p])}</td><td>${data.count>1||p===50?life(point[key]):'Ab zwei gültigen Zyklen'}</td></tr>`).join('');
       el('StatisticsRows').innerHTML=[['Wake-Energie','wakeEnergy','µWh'],['Sleep-Energie · gemessene Dauer','sleepEnergy','µWh'],['Sleep-Leistung · auf Dauer normiert','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}</tr>`).join('');
       el('Export').disabled=false;
       status(`${data.sources.length} ausgewählte Messungen · ${data.activeMeasurementCount} mit positivem Einfluss · ${data.count} gültige Zyklen bei ${data.voltageV} V${data.interpolatedCount?` · ${data.interpolatedCount} Zyklen mit ergänzten Datenlücken`:''}. ${data.count<2?'Für eine Streuungsauswertung sind mindestens zwei Zyklen nötig.':''}`);
-      const x=curve.map(p=>p.x/factor()),traces=[];
-      if(data.count>1){
-        traces.push({x,y:curve.map(p=>finite(p.minH/24)),type:'scatter',mode:'lines',line:{width:0},showlegend:false,hoverinfo:'skip'});
-        traces.push({x,y:curve.map(p=>finite(p.maxH/24)),type:'scatter',mode:'lines',line:{width:0},fill:'tonexty',fillcolor:'rgba(110,168,254,.09)',name:'Beobachtetes Min/Max',hoverinfo:'skip'});
-        traces.push({x,y:curve.map(p=>finite(p.lowH/24)),type:'scatter',mode:'lines',line:{width:0},showlegend:false,hoverinfo:'skip'});
-        traces.push({x,y:curve.map(p=>finite(p.highH/24)),type:'scatter',mode:'lines',line:{width:0},fill:'tonexty',fillcolor:'rgba(110,168,254,.18)',name:'Szenarien P10–P90',hoverinfo:'skip'});
+      const display=point.expectedH>=8760?{factor:8760,label:'Jahre'}:point.expectedH>=2160?{factor:730,label:'Monate'}:point.expectedH>=336?{factor:168,label:'Wochen'}:{factor:24,label:'Tage'};
+      const x=curve.map(p=>p.hours/display.factor),traces=[],shapes=[],annotations=[];
+      if(curve.length)traces.push({x,y:curve.map(p=>p.densityPerHour*display.factor),type:'scatter',mode:'lines',line:{color:'#6ea8fe',width:3},fill:'tozeroy',fillcolor:'rgba(110,168,254,.10)',name:'Normalmodell',hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<br>Dichte: %{y:.5g}<extra></extra>`});
+      if(data.count>1&&Number.isFinite(point.maxH))shapes.push({type:'rect',xref:'x',yref:'paper',x0:point.minH/display.factor,x1:point.maxH/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.08)',line:{width:0},layer:'below'});
+      if(curve.length)shapes.push({type:'rect',xref:'x',yref:'paper',x0:distribution.modelPercentiles['5']/display.factor,x1:distribution.modelPercentiles['95']/display.factor,y0:0,y1:1,fillcolor:'rgba(110,168,254,.18)',line:{width:0},layer:'below'});
+      const markers=[[point.expectedH,'Erwartete Laufzeit / P50 im Modell','#65d98b','solid'],[point.medianH,'Empirischer Median','#f2c66b','dash']];
+      if(curve.length)markers.push([distribution.modelPercentiles['5'],'P5 · 90-%-Grenze','#a7c9ff','dot'],[distribution.modelPercentiles['95'],'P95 · 90-%-Grenze','#a7c9ff','dot']);
+      if(data.count>1)markers.push([point.minH,'Gemessenes Minimum','#87929d','dash'],[point.maxH,'Gemessenes Maximum','#87929d','dash']);
+      for(const [hours,label,color,dash] of markers){
+        if(!Number.isFinite(hours))continue;
+        shapes.push({type:'line',xref:'x',yref:'paper',x0:hours/display.factor,x1:hours/display.factor,y0:0,y1:1,line:{color,width:label.startsWith('Erwartete')?2:1,dash}});
+        traces.push({x:[hours/display.factor,hours/display.factor],y:[0,null],type:'scatter',mode:'lines',line:{color,width:2,dash},name:label,hoverinfo:'skip'});
+        if(label.startsWith('P5')||label.startsWith('P95'))annotations.push({xref:'x',yref:'paper',x:hours/display.factor,y:.7,text:label.slice(0,3),showarrow:false,font:{color:'#a7c9ff',size:11}});
       }
-      traces.push({x,y:curve.map(p=>finite(p.expectedH/24)),type:'scatter',mode:'lines',line:{color:'#65d98b',width:3},name:'Erwartete Laufzeit',hovertemplate:`${mode()==='sleep'?'Sleep':'Duty'}: %{x:.4g} ${unit()}<br>Laufzeit: %{y:.3f} Tage<extra></extra>`});
-      if(data.count>1)traces.push({x,y:curve.map(p=>finite(p.medianH/24)),type:'scatter',mode:'lines',line:{color:'#6ea8fe',width:1.5,dash:'dot'},name:'Median · P50',hovertemplate:'Median: %{y:.3f} Tage<extra></extra>'});
-      traces.push({x:[value/factor()],y:[finite(point.expectedH/24)],type:'scatter',mode:'markers',marker:{color:'#f2c66b',size:12,line:{color:'#0a0d10',width:2}},name:'Deine Einstellung',hovertemplate:'%{y:.3f} Tage<extra>Deine Einstellung</extra>'});
-      const shapes=[{type:'line',xref:'x',yref:'paper',x0:value/factor(),x1:value/factor(),y0:0,y1:1,line:{color:'#f2c66b',width:1,dash:'dot'}}];
-      if(inside)shapes.push({type:'line',xref:'x',yref:'paper',x0:median/factor(),x1:median/factor(),y0:0,y1:1,line:{color:'#6ea8fe',width:1,dash:'dash'}});
-      const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:12},margin:{l:74,r:24,t:24,b:86},
-        xaxis:{title:{text:mode()==='sleep'?`Sleep-Dauer zwischen Wakes [${unit()}]`:'Wake-Duty-Cycle [%]',standoff:16},type:mode()==='sleep'&&min>0?'log':'linear',gridcolor:'#252d35',zeroline:false},
-        yaxis:{title:{text:'Batterielaufzeit [Tage]',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
-        legend:{orientation:'h',x:0,y:1.15,font:{size:11}},shapes,hovermode:'x unified',uirevision:`battery-${[...selected.keys()].join(',')}-${mode()}-${unit()}`};
+      if(!curve.length&&Number.isFinite(point.expectedH))traces.push({x:[point.expectedH/display.factor],y:[1],type:'scatter',mode:'markers',marker:{color:'#65d98b',size:10},showlegend:false,hovertemplate:`Laufzeit: %{x:.3f} ${display.label}<extra></extra>`});
+      const radius=curve.length?(curve.at(-1).hours-curve[0].hours)/2:Math.max(Math.abs(point.expectedH)*.15,1);
+      if(!curve.length)annotations.push({xref:'paper',yref:'paper',x:.5,y:.85,text:distribution.reason,showarrow:false,font:{color:'#aeb8c2',size:11}});
+      const compact=el('Chart').clientWidth>0&&el('Chart').clientWidth<500;
+      const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:12},margin:{l:compact?66:82,r:24,t:compact?160:70,b:86},
+        xaxis:{title:{text:`Batterielaufzeit [${display.label}]`,standoff:16},range:Number.isFinite(point.expectedH)?[(point.expectedH-radius)/display.factor,(point.expectedH+radius)/display.factor]:undefined,type:'linear',gridcolor:'#252d35',zeroline:false},
+        yaxis:{title:{text:curve.length?`Dichte des Normalmodells [1/${display.label}]`:'Laufzeitmarkierung',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
+        annotations,legend:{orientation:'h',x:0,y:1.03,yanchor:'bottom',font:{size:10}},shapes,hovermode:'x unified'};
       renderChain=renderChain.catch(()=>{}).then(async()=>{
         if(token!==renderToken||state.view!=='battery')return;
         await Plotly.react(el('Chart'),traces,layout,{responsive:true,displaylogo:false,scrollZoom:false});
@@ -267,13 +288,13 @@ const BatteryLifeUI=(()=>{
       if(token!==renderToken||ids.join(',')!==[...selected.keys()].join(',')||state.view!=='battery')throw new Error('Die Eingaben haben sich während des Exports geändert. Bitte erneut exportieren.');
       const response=await fetch('/api/battery-report',{
         method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({energy_wh:values.energyWh,
-          mode:mode(),value:values.value,range_min:values.min,range_max:values.max,chart_png:chart,
+          mode:mode(),value:values.value,chart_png:chart,
           weighting,sources:ids.map(id=>({measurement_id:id,weight:weighting==='custom'?selected.get(id):1}))})});
       if(!response.ok){const error=await response.json();throw new Error(error.detail||'PDF-Export fehlgeschlagen.')}
       const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');
       link.href=url;link.download='battery_life_combined.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(error){status(typeof error.message==='string'?error.message:'PDF-Export fehlgeschlagen.',true)}
-    finally{el('Export').disabled=!data}
+    finally{el('Export').disabled=!data||el('Status').classList.contains('event-load-error')}
   }
   function install(){
     el('Export').addEventListener('click',exportPdf);
@@ -285,10 +306,10 @@ const BatteryLifeUI=(()=>{
     let lastTimeFactor=timeUnits[el('TimeUnit').value];
     el('TimeUnit').addEventListener('change',()=>{
       const next=timeUnits[el('TimeUnit').value];
-      for(const id of ['Value','Min','Max'])el(id).value=Number((Number(el(id).value)*lastTimeFactor/next).toPrecision(8));
+      el('Value').value=Number((Number(el('Value').value)*lastTimeFactor/next).toPrecision(8));
       lastTimeFactor=next;schedule();
     });
-    for(const id of ['Energy','EnergyUnit','Value','Min','Max'])el(id).addEventListener('input',schedule);
+    for(const id of ['Energy','EnergyUnit','Value'])el(id).addEventListener('input',schedule);
   }
   return {open,install};
 })();

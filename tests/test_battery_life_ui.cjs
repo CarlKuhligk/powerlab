@@ -10,7 +10,7 @@ const close=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-9*Math.max
 
 function harness(){
   const elements=new Map(),timers=new Map(),requests=[],plots=[];
-  const defaults={Search:'',Weighting:'mean',Mode:'sleep',TimeUnit:'seconds',Energy:'1',EnergyUnit:'Wh',Value:'60',Min:'1',Max:'3600'};
+  const defaults={Search:'',Weighting:'mean',Mode:'sleep',TimeUnit:'seconds',Energy:'1',EnergyUnit:'Wh',Value:'60'};
   let sourceNodes=[];
   function parseSources(html){
     sourceNodes=[];
@@ -59,22 +59,51 @@ test('runtime scales with capacity, timing and observed joint variance',()=>{
   assert.throws(()=>model.curve(data,1,'sleep',10,1));
 });
 
-test('calculator draws both bands and tables, preserves seconds on unit changes',async()=>{
+test('calculator centers the bell curve and 90 percent band, including 24 hour sleep',async()=>{
   const h=harness();h.ui.install();
   const opening=h.ui.open('chosen');
   h.requests[0].resolve([{id:'chosen',name:'Chosen',status:'completed'}]);
   await new Promise(r=>setImmediate(r));
   h.requests[1].resolve(summary());await opening;await h.flush();
-  assert.equal(h.plots.at(-1).traces.filter(t=>t.fill==='tonexty').length,2);
+  assert.equal(h.plots.at(-1).traces.filter(t=>t.fill==='tozeroy').length,1);
+  assert.equal(h.plots.at(-1).layout.shapes.filter(s=>s.type==='rect').length,2);
   assert.match(h.el('StatisticsRows').innerHTML,/Varianz|µWh²/);
   assert.match(h.el('PercentileRows').innerHTML,/P95/);
   const seconds=Number(h.el('Value').value);
   h.el('TimeUnit').value='minutes';h.el('TimeUnit').listeners.change();await h.flush();
   close(Number(h.el('Value').value)*60,seconds);
+  h.el('TimeUnit').value='hours';h.el('TimeUnit').listeners.change();
+  h.el('Value').value='24';h.el('Value').listeners.input();await h.flush();
+  const plot=h.plots.at(-1),bell=plot.traces[0];
+  assert.equal(h.el('Export').disabled,false);
+  assert.match(plot.layout.xaxis.title.text,/Jahre/);
+  const expected=h.model.evaluate(h.model.combine([{id:'chosen',summary:summary()}]),1,'sleep',86400).expectedH/8760;
+  close((plot.layout.xaxis.range[0]+plot.layout.xaxis.range[1])/2,expected);
+  close(bell.x[120],expected);
+  assert.equal(bell.y[120],Math.max(...bell.y));
+  assert.match(h.el('Band').textContent,/bis/);
   h.el('Energy').value='0';h.el('Energy').listeners.input();await h.flush();
   assert.equal(h.el('Runtime').textContent,'—');
   assert.equal(h.el('Export').disabled,true);
   assert.match(h.el('Status').textContent,/positive/);
+  assert.equal(h.el('DistributionNote').textContent,'');
+});
+
+test('normal model uses measured scatter and P5 to P95 for its central 90 percent',()=>{
+  const {model}=harness(),data=model.profile(summary());
+  const result=model.distribution(data,1,'sleep',86400);
+  close(result.meanH,result.point.expectedH);
+  close(result.stddevH,Math.abs(result.point.maxH-result.point.minH)/Math.sqrt(2));
+  close(result.modelPercentiles[5],result.meanH-1.6448536269514722*result.stddevH);
+  close(result.modelPercentiles[95],result.meanH+1.6448536269514722*result.stddevH);
+  close(model.distribution(data,2,'sleep',86400).stddevH,result.stddevH*2);
+  const one=summary();one.valid_wake_phases=one.valid_wake_phases.slice(0,1);one.valid_sleep_phases=one.valid_sleep_phases.slice(0,1);
+  const single=model.distribution(model.profile(one),1,'sleep',86400);
+  assert.equal(single.stddevH,null);assert.equal(single.curve.length,0);
+  assert.match(single.reason,/mindestens zwei/);
+  const identical=summary();identical.valid_wake_phases[1]={...identical.valid_wake_phases[0],sequence:2};identical.valid_sleep_phases[1]={...identical.valid_sleep_phases[0],following_wake_sequence:2};
+  const zero=model.distribution(model.profile(identical),1,'sleep',86400);
+  assert.equal(zero.stddevH,0);assert.equal(zero.curve.length,0);
 });
 
 test('late source responses cannot replace the currently selected measurement',async()=>{

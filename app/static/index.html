@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="stylesheet" href="/static/styles.css?v=1.0.6-battery-life">
-  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-multi-battery-life">
+  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-battery-distribution">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
@@ -78,13 +78,13 @@
           <label class="battery-field">Timing einstellen über<select id="batteryMode"><option value="sleep">Sleep-Dauer zwischen Wakes</option><option value="duty">Wake-Duty-Cycle</option></select></label>
           <label class="battery-field"><span id="batteryValueLabel">Sleep-Dauer zwischen Wakes</span><div class="battery-input-unit"><input id="batteryValue" type="number" min="0" step="any" value="60" aria-label="Gewählte Sleep-Dauer oder Duty-Cycle"><select id="batteryTimeUnit" aria-label="Einheit der Sleep-Dauer"><option value="seconds">Sekunden</option><option value="minutes">Minuten</option><option value="hours">Stunden</option></select></div></label>
           <p id="batteryMeasuredMedian" class="form-hint"></p>
-          <div class="battery-range-inputs"><label class="battery-field">Kurvenbereich von<input id="batteryMin" type="number" step="any" value="1"></label><label class="battery-field">bis<input id="batteryMax" type="number" step="any" value="3600"></label></div>
           <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
         </div>
         <div class="card chart-card battery-chart-card">
-          <div class="card-title-row"><div><h3>Laufzeitkurve</h3><p>Grün: erwartete Laufzeit · Blau: gemessene Streuung · Gold: deine Einstellung</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
-          <div class="battery-result-grid"><div><span>Erwartete Laufzeit</span><strong id="batteryRuntime">—</strong></div><div><span>Szenarien P10–P90</span><strong id="batteryBand">—</strong></div><div><span>Erwartete Leistung</span><strong id="batteryPower">—</strong></div></div>
-          <div id="batteryChart" class="chart large-chart" aria-label="Laufzeitkurve mit Min/Max- und Perzentilbändern"></div>
+          <div class="card-title-row"><div><h3>Laufzeitverteilung für deine Einstellung</h3><p>Erwartete Laufzeit in der Mitte · zentrales 90-%-Modellintervall P5–P95</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
+          <div class="battery-result-grid"><div><span>Erwartete Laufzeit · Mitte</span><strong id="batteryRuntime">—</strong></div><div><span>90 % im Normalmodell · P5–P95</span><strong id="batteryBand">—</strong></div><div><span>Erwartete Leistung</span><strong id="batteryPower">—</strong></div></div>
+          <div id="batteryChart" class="chart large-chart" aria-label="Glockenkurve der Laufzeit mit empirischen Min/Max- und Perzentilbändern"></div>
+          <p id="batteryDistributionNote" class="form-hint"></p>
           <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
         </div>
       </div>
@@ -94,8 +94,8 @@
       </div>
       <div class="card table-card">
         <div class="card-title-row"><div><h3>Laufzeit-Perzentile für deine Einstellung</h3><p>Jeder beobachtete Zyklus bildet ein Szenario, als würde sich sein Verbrauch wiederholen. Szenarien werden nach dem gewählten Messungseinfluss gewichtet; Perzentile werden an den Mittelpunkten der kumulierten Gewichte linear interpoliert. Min/Max umfassen nur Messungen mit positivem Einfluss.</p></div></div>
-        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Laufzeit</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
-        <p class="form-hint battery-assumptions">Das Szenarioband ist kein Konfidenzintervall und keine kalibrierte Wahrscheinlichkeit der tatsächlichen Batterielaufzeit. Die Wake-Energie und Wake-Dauer entsprechen der Messung; Sleep-Energie skaliert mit der geplanten Sleep-Dauer. Batterieenergie bedeutet die an der Messspannung nutzbare Energie. Selbstentladung, Alterung und Änderungen des Gerätezustands sind nicht modelliert.</p>
+        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Normalmodell</th><th>Gemessene Szenarien</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
+        <p class="form-hint battery-assumptions">Das Normalmodell wird um Batterieenergie / erwartete Leistung zentriert; seine Standardabweichung stammt aus den gewichteten Szenario-Laufzeiten. Unter dieser Normalannahme liegen 90 % zwischen P5 und P95. Dies ist keine aus der Messung bewiesene Wahrscheinlichkeit der tatsächlichen Laufzeit. Die Tabelle unterscheidet Modell-Perzentile und empirische Szenarien; deren Median kann abweichen. Negative Modellgrenzen sind unphysikalisch und werden benannt. Die Wake-Energie und Wake-Dauer entsprechen der Messung; Sleep-Energie skaliert mit der geplanten Sleep-Dauer. Batterieenergie bedeutet die an der Messspannung nutzbare Energie. Selbstentladung, Alterung und Änderungen des Gerätezustands sind nicht modelliert.</p>
       </div>
     </section>
 
@@ -354,6 +354,6 @@
 <script src="/static/cycle-energy.js?v=1.0.6-wake-variance"></script>
 <script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/battery-life.js?v=1.0.6-multi-battery-life"></script>
+<script src="/static/battery-life.js?v=1.0.6-battery-distribution"></script>
 <script src="/static/app.js?v=1.0.6-battery-life"></script>
 </body></html>
