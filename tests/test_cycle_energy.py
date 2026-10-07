@@ -34,6 +34,16 @@ def test_only_complete_cycles_energy_and_weighted_projection():
     events,segments,markers=fixture()
     result=confirmed_cycle_energy(10,3300,events,segments,markers,3600)
     assert result['cycle_count']==2 and result['excluded_wake_count']==1
+    phases = result['valid_wake_phases']
+    assert len(phases) == 2
+    assert [p['start_s'] for p in phases] == [1, 3.2]
+    assert [p['mean_ua'] for p in phases] == [1000, 2000]
+    assert phases[0]['duration_s'] == .2
+    assert phases[0]['charge_uc'] == 200
+    assert phases[0]['energy_uwh'] == pytest.approx(200*3.3/3600)
+    sleep_phases = result['valid_sleep_phases']
+    assert [p['duration_s'] for p in sleep_phases] == [1, 2]
+    assert [p['charge_uc'] for p in sleep_phases] == [4, 12]
     assert result['average_wake_energy_uwh']==pytest.approx(500*3.3/3600)
     assert result['average_sleep_energy_uwh']==pytest.approx(8*3.3/3600)
     assert result['average_sleep_current_ua']==pytest.approx(16/3)
@@ -55,6 +65,44 @@ def test_missing_confirmation_never_looks_like_zero_energy(missing):
     assert result['cycle_count']==0
     assert result['average_wake_energy_uwh'] is None
     assert result['projections']['day']['combined_energy_uwh'] is None
+
+
+def test_wake_variability_uses_only_valid_cycles_and_equal_event_weights():
+    result = confirmed_cycle_energy(10, 3300, *fixture())
+    stats = result['wake_variability']
+    assert stats['count'] == 2 and stats['ddof'] == 1
+    for key, average, spread in [('duration_s', .3, .02),
+                                  ('current_ua', 1500, 500000),
+                                  ('energy_uwh', 500*3.3/3600, (600*3.3/3600)**2/2)]:
+        assert stats[key]['mean'] == pytest.approx(average)
+        assert stats[key]['variance'] == pytest.approx(spread)
+        assert stats[key]['stddev'] == pytest.approx(spread**.5)
+        assert stats[key]['cv_pct'] == pytest.approx(spread**.5/average*100)
+
+
+@pytest.mark.parametrize('count', [0, 1])
+def test_wake_variability_requires_two_valid_events(count):
+    events, segments, markers = fixture()
+    result = confirmed_cycle_energy(10, 3300, events[:count], segments, markers)
+    stats = result['wake_variability']
+    assert stats['count'] == count
+    for key in ('duration_s', 'current_ua', 'energy_uwh'):
+        assert (stats[key]['mean'] is None) == (count == 0)
+        assert all(stats[key][field] is None for field in ('variance', 'stddev', 'cv_pct'))
+
+
+def test_identical_wake_values_have_zero_variance():
+    events, segments, markers = fixture()
+    events[1] = event(32, 33, 1000)
+    for marker in markers:
+        if marker.sample_index == 36:
+            marker.sample_index = 34
+        elif marker.sample_index == 40:
+            marker.sample_index = 35
+    stats = confirmed_cycle_energy(10, 3300, events, segments, markers)['wake_variability']
+    assert stats['count'] == 2
+    for key in ('duration_s', 'current_ua', 'energy_uwh'):
+        assert stats[key]['variance'] == stats[key]['stddev'] == stats[key]['cv_pct'] == 0
 
 
 def test_sleep_without_wake_and_unclosed_wake_excluded():
@@ -103,6 +151,8 @@ def test_small_gaps_restore_charge_and_report_estimated_samples():
     assert result['interpolated_duration_s'] == pytest.approx(.00048)
     assert result['average_sleep_current_ua'] == pytest.approx(4)
     assert result['average_wake_current_ua'] == pytest.approx(1000)
+    assert result['valid_sleep_phases'][0]['interpolated_samples'] == 32
+    assert result['valid_wake_phases'][0]['interpolated_samples'] == 16
     assert result['projections']['day']['combined_energy_uwh'] == pytest.approx(1004*3.3/2*24)
 
 

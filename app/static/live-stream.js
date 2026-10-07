@@ -42,6 +42,7 @@ function mergeLiveFrame(previous,frame){
   }
   return {...incoming,spectrogram,summary_points:points,point_count:points.length,
     events:reset?incoming.events:previous.events,
+    valid_wake_phases:reset?incoming.valid_wake_phases:previous.valid_wake_phases,
     state_markers:reset?incoming.state_markers:previous.state_markers};
 }
 

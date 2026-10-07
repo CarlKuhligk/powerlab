@@ -14,12 +14,16 @@ TEMPLATE = Path(__file__).parent / "templates" / "measurement.typ"
 TIME_UNITS = ((1e-6, "µs"), (1e-3, "ms"), (1, "s"),
               (60, "min"), (3600, "h"), (86400, "d"))
 DISPLAY_UNITS = {
+    "µW": ((1e-3, "nW"), (1, "µW"), (1e3, "mW"), (1e6, "W")),
     "µA": ((1e-3, "nA"), (1, "µA"), (1e3, "mA"), (1e6, "A")),
     "µC": ((1e-3, "nC"), (1, "µC"), (1e3, "mC"), (1e6, "C"), (1e9, "kC")),
     "µWh": ((1e-3, "nWh"), (1, "µWh"), (1e3, "mWh"), (1e6, "Wh"), (1e9, "kWh")),
     "s": TIME_UNITS,
     "ms": tuple((factor * 1000, unit) for factor, unit in TIME_UNITS),
 }
+for base_unit in ('µA', 'µWh', 'µW', 's'):
+    DISPLAY_UNITS[base_unit + '²'] = tuple((factor**2, unit + '²')
+                                          for factor, unit in DISPLAY_UNITS[base_unit])
 
 
 def number(value, unit="", digits=3):
@@ -53,6 +57,8 @@ def report_data(measurement: dict, overview: dict) -> dict:
     sleep = a.get("average_sleep_current_ua")
     if sleep is None and settings.get("detection_mode") != "threshold":
         sleep = m.get("sleep_current_ua")
+    sleep_data = m.get('sleep_analysis', {})
+    variability = m.get('cycle_energy', a.get('confirmed_cycles', {})).get('wake_variability', {})
     return {
         "name": m["name"], "id": m["id"], "status": m["status"],
         "generated": date(datetime.now(timezone.utc).isoformat()),
@@ -92,6 +98,31 @@ def report_data(measurement: dict, overview: dict) -> dict:
             ["Erkannte verlorene Samples", number(m.get("detected_lost_samples"), digits=0)],
             ["Datenabdeckung", number(m.get("data_coverage_pct") if m.get("total_samples") else None, "%", 6)],
         ],
+        "sleep_results": [[label, number(sleep_data.get(key), unit, digits)] for label, key, unit, digits in [
+            ('Gespeicherte Sleep-Abschnitte', 'recorded_segment_count', '', 0),
+            ('Erfasste Sleep-Zeit', 'recorded_duration_s', 's', 6),
+            ('Mittlerer Sleep-Strom · erfasste Daten', 'average_current_ua', 'µA', 6),
+            ('Sleep-Ladung', 'charge_uc', 'µC', 6),
+            ('Sleep-Energie (konfigurierte Spannung)', 'energy_uwh', 'µWh', 6),
+            ('Hintergrundereignisse im Sleep', 'background_count', '', 0),
+            ('Davon Hintergrundladung', 'background_charge_uc', 'µC', 6),
+            ('Sleep-Phasen aus gültigen Zyklen', 'valid_phase_count', '', 0),
+            ('Mittlere Sleep-Dauer · gültige Zyklen', 'average_valid_duration_s', 's', 6),
+            ('Mittlere Sleep-Energie · gültige Zyklen', 'average_valid_energy_uwh', 'µWh', 6),
+        ]],
+        "sleep_phases": [[str(p['following_wake_sequence']), number(p['start_s'], 's', 6),
+                          number(p['duration_s'], 's', 6), number(p['mean_ua'], 'µA', 6),
+                          number(p['charge_uc'], 'µC', 6), number(p['energy_uwh'], 'µWh', 6),
+                          'Ergänzt' if p['interpolated_samples'] else 'Vollständig']
+                         for p in sleep_data.get('valid_phases', [])],
+        "wake_variability_count": str(variability.get('count', 0)),
+        "wake_variability": [[label, number(metric.get('mean'), unit, 6),
+                              number(metric.get('stddev'), unit, 6),
+                              number(metric.get('variance'), unit + '²', 9), number(metric.get('cv_pct'), '%')]
+                             for key, label, unit in [('duration_s', 'Wake-Dauer', 's'),
+                                                       ('current_ua', 'Strom je Wake', 'µA'),
+                                                       ('energy_uwh', 'Wake-Energie', 'µWh')]
+                             for metric in [variability.get(key, {})]],
         "events": [[str(e["sequence"]), "Hintergrund" if e.get("event_kind") == "background" else "Wake",
                     number(e["trigger_sample"] / m["sample_rate_hz"], "s", 6),
                     number(e["duration_us"] / 1000, "ms"), number(e["mean_ua"], "µA"),

@@ -2,6 +2,8 @@
 const CycleEnergyUI=(()=>{
   const summaries={};
   const units={seconds:1,minutes:60,hours:3600,days:86400,weeks:604800};
+  const variabilityMetrics=[['duration_s','Wake-Dauer','s'],['current_ua','Mittlerer Strom je Wake','µA'],['energy_uwh','Wake-Energie','µWh']];
+  const statistic=(value,unit)=>value==null?'—':`${Number(value.toPrecision(5)).toLocaleString('de-DE',{maximumSignificantDigits:5})} ${unit}`;
   const energy=value=>value==null?'—':Math.abs(value)>=1e6?`${(value/1e6).toFixed(4)} Wh`:Math.abs(value)>=1000?`${(value/1000).toFixed(4)} mWh`:Math.abs(value)<.01?`${(value*1000).toFixed(3)} nWh`:`${value.toFixed(4)} µWh`;
   const power=value=>value==null?'—':Math.abs(value)>=1000?`${(value/1000).toFixed(4)} mW`:`${value.toFixed(4)} µW`;
   function custom(prefix){
@@ -33,12 +35,25 @@ const CycleEnergyUI=(()=>{
       document.getElementById(`${prefix}Cycle${period}${kind}`).textContent=energy(data?.projections?.[period]?.[`${kind}_energy_uwh`]??null);
     }
     custom(prefix);
+    const variability=data?.wake_variability;
+    document.getElementById(`${prefix}CycleVariabilityNote`).textContent=
+      `Streuung zwischen ${variability?.count??0} gültigen Wakes aus den oben gezählten Zyklen. Jeder Wake zählt gleich. Stichprobenvarianz (n − 1); mindestens zwei Wakes erforderlich. Relative Streuung = Standardabweichung / Betrag des Mittelwerts.`;
+    for(const [key,label,unit] of variabilityMetrics){
+      const metric=variability?.[key];
+      for(const [field,displayUnit] of [['mean',unit],['stddev',unit],['variance',`${unit}²`],['cv_pct','%']]){
+        document.getElementById(`${prefix}CycleVariability${key}${field}`).textContent=statistic(metric?.[field]??null,displayUnit);
+      }
+    }
   }
   function install(){
     for(const prefix of ['detail']){
       const card=document.createElement('div');card.className='card cycle-energy-card detail-energy';
       card.innerHTML=`<div class="card-title-row"><h3>Energie aus bestätigten Zyklen</h3><span id="${prefix}CycleCount"></span></div><p class="form-hint" id="${prefix}CycleNote"></p>
         <div class="kpi-grid detail-kpis"><div class="kpi"><span>Ø Wake-Energie / Zyklus</span><strong id="${prefix}CycleWakeEnergy"></strong></div><div class="kpi"><span>Ø Sleep-Strom · zeitgewichtet</span><strong id="${prefix}CycleSleepCurrent"></strong></div><div class="kpi"><span>Ø Sleep-Energie / Zyklus</span><strong id="${prefix}CycleSleepEnergy"></strong></div><div class="kpi"><span>Ø gemeinsame Leistung</span><strong id="${prefix}CyclePower"></strong></div></div>
+        <h4>Varianz der gültigen Wake-Zustände</h4><p class="form-hint" id="${prefix}CycleVariabilityNote"></p>
+        <div class="event-scroll"><table><thead><tr><th>Wake-Kennwert</th><th>Mittelwert je Wake</th><th>Standardabweichung</th><th>Varianz</th><th>Relative Streuung</th></tr></thead><tbody>
+        ${variabilityMetrics.map(([key,label])=>`<tr><td>${label}</td>${['mean','stddev','variance','cv_pct'].map(field=>`<td id="${prefix}CycleVariability${key}${field}"></td>`).join('')}</tr>`).join('')}
+        </tbody></table></div>
         <div class="event-scroll"><table><thead><tr><th>Hochrechnung</th><th>Wake-Energie</th><th>Sleep-Energie</th><th>Gesamtenergie</th></tr></thead><tbody>
         ${[['day','Tag'],['week','Woche'],['month','Monat · 30 Tage'],['year','Jahr · 365 Tage']].map(([key,label])=>`<tr><td>${label}</td>${['wake','sleep','combined'].map(kind=>`<td id="${prefix}Cycle${key}${kind}"></td>`).join('')}</tr>`).join('')}
         <tr><td><div class="cycle-custom"><input id="${prefix}CycleCustomValue" type="number" min="0.000001" step="any" value="1" aria-label="Eigene Zeitspanne"><select id="${prefix}CycleCustomUnit" aria-label="Einheit der eigenen Zeitspanne"><option value="seconds">Sekunden</option><option value="minutes">Minuten</option><option value="hours">Stunden</option><option value="days" selected>Tage</option><option value="weeks">Wochen</option></select></div></td>${['wake','sleep','combined'].map(kind=>`<td id="${prefix}CycleCustom${kind}"></td>`).join('')}</tr>

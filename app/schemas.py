@@ -6,6 +6,41 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+class BatteryReportRequest(BaseModel):
+    energy_wh: float = Field(gt=0, le=1e12, allow_inf_nan=False)
+    mode: Literal['sleep', 'duty']
+    value: float = Field(ge=0, le=1e12, allow_inf_nan=False)
+    range_min: float = Field(ge=0, le=1e12, allow_inf_nan=False)
+    range_max: float = Field(gt=0, le=1e12, allow_inf_nan=False)
+    chart_png: str = Field(max_length=6_000_000, pattern=r'^data:image/png;base64,')
+
+    @model_validator(mode='after')
+    def validate_range(self):
+        if not self.range_min <= self.value <= self.range_max or self.range_min >= self.range_max:
+            raise ValueError('Einstellung muss innerhalb eines gültigen Kurvenbereichs liegen.')
+        if self.mode == 'duty' and (self.range_min <= 0 or self.range_max > 100):
+            raise ValueError('Duty-Cycle muss über 0 bis 100 % liegen.')
+        return self
+
+
+class BatteryMeasurementWeight(BaseModel):
+    measurement_id: str = Field(min_length=1, max_length=160)
+    weight: float = Field(default=1, ge=0, le=1e12, allow_inf_nan=False)
+
+
+class BatteryMultiReportRequest(BatteryReportRequest):
+    sources: list[BatteryMeasurementWeight] = Field(min_length=1, max_length=2000)
+    weighting: Literal['mean', 'cycle_count', 'custom'] = 'mean'
+
+    @model_validator(mode='after')
+    def validate_sources(self):
+        if len({s.measurement_id for s in self.sources}) != len(self.sources):
+            raise ValueError('Messungen dürfen nicht mehrfach ausgewählt werden.')
+        if self.weighting == 'custom' and not any(s.weight > 0 for s in self.sources):
+            raise ValueError('Mindestens ein Gewicht muss positiv sein.')
+        return self
+
+
 class MeasurementStartRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     project: str = Field(default="", max_length=160)

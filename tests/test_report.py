@@ -71,6 +71,9 @@ def test_pdf_download_uses_history_values_and_treats_user_text_as_data(
     (1500, "ms", "1,500 s"),
     (100_000, "", "100 000,000"),
     (99.5, "%", "99,500 %"),
+    (1e-12, "s²", "1,000 µs²"),
+    (4e6, "µA²", "4,000 mA²"),
+    (1e-6, "µWh²", "1,000 nWh²"),
 ])
 def test_report_numbers_choose_readable_units(value, unit, expected):
     assert number(value, unit) == expected

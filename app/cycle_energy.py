@@ -1,6 +1,7 @@
 """Energy from disjoint, fully validated Sleep -> Wake -> Sleep cycles."""
 from bisect import bisect_left, bisect_right
 import math
+from statistics import mean, variance
 
 
 PERIODS = {'day': 86400, 'week': 7 * 86400, 'month': 30 * 86400, 'year': 365 * 86400}
@@ -11,6 +12,26 @@ MAX_INTERPOLATED_PHASE_FRACTION = .001
 def _small_gap(missing, span, sample_rate):
     return (0 <= missing <= MAX_INTERPOLATED_PHASE_S * sample_rate
             and missing <= span * MAX_INTERPOLATED_PHASE_FRACTION)
+
+
+def _phase_variability(cycles, voltage, phase):
+    """Unweighted phase statistics; sample variance needs at least two phases."""
+    result = {'count': len(cycles), 'variance_method': 'sample', 'ddof': 1}
+    values = {
+        'duration_s': [c[f'{phase}_duration_s'] for c in cycles],
+        'current_ua': [c[f'{phase}_charge_uc'] / c[f'{phase}_duration_s'] for c in cycles],
+        'energy_uwh': [c[f'{phase}_charge_uc'] * voltage / 3600 for c in cycles],
+    }
+    for key, observations in values.items():
+        average = mean(observations) if observations else None
+        spread = variance(observations) if len(observations) > 1 else None
+        stddev = math.sqrt(spread) if spread is not None else None
+        result[key] = {'mean': average, 'variance': spread, 'stddev': stddev,
+                       'min': min(observations) if observations else None,
+                       'max': max(observations) if observations else None,
+                       'cv_pct': stddev / abs(average) * 100
+                       if stddev is not None and average else None}
+    return result
 
 
 def project(summary, duration_s):
@@ -96,11 +117,15 @@ def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, mark
                 or not _small_gap(wake_missing, end - wake, sample_rate)):
             rejected_gaps += 1
             continue
-        cycles.append({'sleep_start_sample': sleep, 'wake_start_sample': wake, 'sleep_return_sample': end,
+        cycles.append({'sequence': getattr(event, 'sequence', len(cycles) + 1),
+                       'peak_ua': getattr(event, 'peak_ua', None),
+                       'sleep_start_sample': sleep, 'wake_start_sample': wake, 'sleep_return_sample': end,
                        'sleep_duration_s': (wake - sleep) / sample_rate,
                        'wake_duration_s': (end - wake) / sample_rate,
                        'sleep_charge_uc': sleep_charge,
                        'wake_charge_uc': event.charge_uc + wake_missing * event.mean_ua / sample_rate,
+                       'sleep_interpolated_samples': sleep_missing,
+                       'wake_interpolated_samples': wake_missing,
                        'interpolated_samples': sleep_missing + wake_missing})
     count = len(cycles)
     voltage = voltage_mv / 1000
@@ -132,6 +157,22 @@ def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, mark
               'wake_duty_cycle_pct': wake_s / duration * 100 if duration else None,
               'assumption': 'Observed complete cycles repeat at the measured voltage; month=30 days, year=365 days.'}
     result['projections'] = {name: project(result, seconds) for name, seconds in PERIODS.items()}
+    result['wake_variability'] = _phase_variability(cycles, voltage, 'wake')
+    result['sleep_variability'] = _phase_variability(cycles, voltage, 'sleep')
+    result['valid_wake_phases'] = [
+        {'sequence': c['sequence'], 'start_s': c['wake_start_sample'] / sample_rate,
+         'duration_s': c['wake_duration_s'],
+         'mean_ua': c['wake_charge_uc'] / c['wake_duration_s'], 'peak_ua': c['peak_ua'],
+         'charge_uc': c['wake_charge_uc'], 'energy_uwh': c['wake_charge_uc'] * voltage / 3600,
+         'interpolated_samples': c['wake_interpolated_samples']}
+        for c in cycles]
+    result['valid_sleep_phases'] = [
+        {'following_wake_sequence': c['sequence'], 'start_s': c['sleep_start_sample'] / sample_rate,
+         'duration_s': c['sleep_duration_s'],
+         'mean_ua': c['sleep_charge_uc'] / c['sleep_duration_s'],
+         'charge_uc': c['sleep_charge_uc'], 'energy_uwh': c['sleep_charge_uc'] * voltage / 3600,
+         'interpolated_samples': c['sleep_interpolated_samples']}
+        for c in cycles]
     if custom_duration_s is not None:
         result['projections']['custom'] = project(result, custom_duration_s)
     return result

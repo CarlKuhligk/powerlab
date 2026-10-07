@@ -31,6 +31,7 @@ from .ppk import NordicPPK2Driver, PowerProfilerDriver, SampleBatch, describe_pp
 from .recorder import OverviewData, RecorderSettings, SleepSegmentData, WakeEventData
 from .threshold import ThresholdRecorder
 from .cycle_energy import confirmed_cycle_energy
+from .sleep_analysis import sleep_analysis
 from .schemas import MeasurementPatchRequest, MeasurementStartRequest
 from .storage.raw_store import RawStore
 
@@ -836,6 +837,7 @@ class MeasurementManager:
         reset = subscription.epoch != epoch or bool(points and points[0]["sample_index"] <= subscription.cursor)
         if reset:
             series = self.series(measurement_id, max_points=max_points, view="overview")
+            series['valid_wake_phases'] = self.cycle_energy(measurement_id)['valid_wake_phases']
             # Use the same history snapshot as the cursor, even if acquisition
             # advances while the metadata query runs.
             points = history
@@ -926,14 +928,12 @@ class MeasurementManager:
             if not m:
                 raise KeyError(measurement_id)
             payload = self._serialize_measurement(m)
-            payload["events"] = [
-                self._serialize_event(e, m)
-                for e in s.scalars(
+            stored_events = list(s.scalars(
                     select(WakeEvent)
                     .where(WakeEvent.measurement_id == measurement_id)
                     .order_by(WakeEvent.sequence)
-                )
-            ]
+                ))
+            payload["events"] = [self._serialize_event(e, m) for e in stored_events]
             payload["background_events"] = [e for e in payload["events"] if e["event_kind"] == "background"]
             payload["events"] = [e for e in payload["events"] if e["event_kind"] != "background"]
             payload["markers"] = [
@@ -945,6 +945,11 @@ class MeasurementManager:
                 )
             ]
             payload['cycle_energy'] = self._cycle_energy_for_session(s, m)
+            segments = list(s.scalars(select(SleepSegment).where(
+                SleepSegment.measurement_id == measurement_id).order_by(SleepSegment.start_sample)))
+            payload['sleep_analysis'] = sleep_analysis(
+                m.sample_rate_hz or self.settings.sample_rate_hz, m.voltage_mv, segments,
+                [e for e in stored_events if e.event_kind == 'background'], payload['cycle_energy'])
             return payload
 
     def _cycle_energy_for_session(self, session, measurement, custom_duration_s=None):

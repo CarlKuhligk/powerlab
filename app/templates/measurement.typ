@@ -39,6 +39,29 @@ beziehen sich die Sleep/Wake-Mittelwerte, Periodendauer und Duty-Cycle auf volls
 bestätigte Zyklen. Fehlende Kennwerte sind mit „—“ gekennzeichnet.
 Die Energie wird aus der Gesamtladung und der konfigurierten Spannung berechnet;
 eine separate Spannungsmessung erfolgt nicht.
+= Sleep-Auswertung
+#rows-table(report.sleep_results)
+Die erfassten Sleep-Kennwerte enthalten alle gespeicherten Sleep-Abschnitte einschließlich
+zugeordneter Hintergrundereignisse. Die Sleep-Zeit zählt empfangene Samples;
+Datenlücken werden hier nicht ergänzt. Auch Sleep ohne vollständigen Wake-Zyklus wird berücksichtigt.
+Gespeicherte Abschnitte sind Speicher-Checkpoints und können zu derselben Sleep-Phase gehören.
+== Sleep-Phasen aus gültigen Zyklen
+Diese Phasen stammen ausschließlich aus vollständig bestätigten Sleep → Wake → Sleep-Zyklen.
+Kleine zulässige Datenlücken werden wie in der Zyklusauswertung ergänzt und gekennzeichnet.
+Die Nummer bezeichnet den anschließenden Wake; Startzeiten liegen auf der Protokollzeitachse.
+#if report.sleep_phases.len() == 0 { [Keine Sleep-Phase aus einem gültigen Zyklus verfügbar.] } else {
+  set text(size: 7.5pt)
+  rows-table(report.sleep_phases, headers: ("Vor Wake", "Beginn", "Dauer", "Ø Strom", "Ladung", "Energie", "Daten"),
+    columns: (0.65fr, 1fr, 1fr, 1fr, 1fr, 1fr, 0.9fr))
+}
+= Varianz der gültigen Wake-Zustände
+#report.wake_variability_count gültige Wakes aus vollständig bestätigten Zyklen.
+Jeder Wake zählt gleich. Die Stichprobenvarianz verwendet n − 1 und benötigt mindestens
+zwei Wakes. Relative Streuung = Standardabweichung / Betrag des Mittelwerts;
+bei Mittelwert null bleibt sie leer.
+#rows-table(report.wake_variability,
+  headers: ("Kennwert", "Mittelwert", "Standardabweichung", "Varianz", "Relative Streuung"),
+  columns: (1fr, 1fr, 1fr, 1fr, 0.8fr))
 = Datenqualität
 #rows-table(report.quality)
 Alle absoluten Zeitangaben sind in UTC. Ereignis- und Markerzeiten sind relativ zum

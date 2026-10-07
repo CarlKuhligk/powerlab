@@ -7,7 +7,8 @@
   <title>PowerLab</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-live-spectrum-ui">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-battery-life">
+  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-multi-battery-life">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
@@ -19,6 +20,7 @@
     <nav>
       <button class="nav active" data-view="live">◉ <span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
       <button class="nav" data-view="measurements">▤ <span>Messungen</span></button>
+      <button class="nav" data-view="battery">◒ <span>Batterielaufzeit</span></button>
     </nav>
     <div class="sidebar-bottom">
       <div class="status-line"><i class="ok"></i><span>SQLite + Parquet</span></div>
@@ -56,6 +58,47 @@
       </div>
     </section>
 
+    <section id="batteryView" class="view">
+      <div class="card battery-source">
+        <div class="card-title-row"><div><h3>Von der Messung zur Batterielaufzeit</h3><p>Sleep- und Wake-Streuung werden direkt aus den gültigen Zyklen übernommen.</p></div><button class="secondary" id="batteryRefresh">Messungen aktualisieren</button></div>
+        <div class="battery-source-controls">
+          <label class="battery-field">Messungen suchen<input id="batterySearch" type="search" placeholder="Name, Projekt oder Gerät"></label>
+          <label class="battery-field">Einfluss der Messungen<select id="batteryWeighting"><option value="mean">Mittel · jede Messung gleich</option><option value="cycle_count">Gewichtet · nach gültigen Zyklen</option><option value="custom">Eigene Gewichte</option></select></label>
+          <button class="secondary" id="batteryClearSelection">Auswahl aufheben</button>
+        </div>
+        <p class="form-hint">Bei „Mittel“ zählt jede Messung gleich. „Gewichtet“ richtet den Einfluss nach der Anzahl gültiger Zyklen. Eigene Gewichte sind relative Anteile, zum Beispiel 7 und 3 für 70 % und 30 %; Gewicht 0 hat keinen Einfluss.</p>
+        <p id="batterySelectionCount" aria-live="polite">0 Messungen ausgewählt</p>
+        <div class="event-scroll battery-source-list"><table><thead><tr><th>Auswahl</th><th>Messung</th><th>Gültige Zyklen</th><th>Eigenes Gewicht</th><th>Einfluss</th></tr></thead><tbody id="batterySourceRows"></tbody></table></div>
+        <p id="batteryStatus" role="status" aria-live="polite">Wähle eine Messung mit gültigen Sleep-/Wake-Zyklen.</p>
+      </div>
+      <div class="battery-layout">
+        <div class="card battery-controls">
+          <h3>Deine Geräteeinstellung</h3>
+          <label class="battery-field">Nutzbare Batterieenergie<div class="battery-input-unit"><input id="batteryEnergy" type="number" min="0.000001" step="any" value="1" aria-label="Nutzbare Batterieenergie"><select id="batteryEnergyUnit" aria-label="Einheit der Batterieenergie"><option value="Wh">Wh</option><option value="mWh">mWh</option></select></div></label>
+          <label class="battery-field">Timing einstellen über<select id="batteryMode"><option value="sleep">Sleep-Dauer zwischen Wakes</option><option value="duty">Wake-Duty-Cycle</option></select></label>
+          <label class="battery-field"><span id="batteryValueLabel">Sleep-Dauer zwischen Wakes</span><div class="battery-input-unit"><input id="batteryValue" type="number" min="0" step="any" value="60" aria-label="Gewählte Sleep-Dauer oder Duty-Cycle"><select id="batteryTimeUnit" aria-label="Einheit der Sleep-Dauer"><option value="seconds">Sekunden</option><option value="minutes">Minuten</option><option value="hours">Stunden</option></select></div></label>
+          <p id="batteryMeasuredMedian" class="form-hint"></p>
+          <div class="battery-range-inputs"><label class="battery-field">Kurvenbereich von<input id="batteryMin" type="number" step="any" value="1"></label><label class="battery-field">bis<input id="batteryMax" type="number" step="any" value="3600"></label></div>
+          <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
+        </div>
+        <div class="card chart-card battery-chart-card">
+          <div class="card-title-row"><div><h3>Laufzeitkurve</h3><p>Grün: erwartete Laufzeit · Blau: gemessene Streuung · Gold: deine Einstellung</p></div><button class="secondary" id="batteryExport" disabled>PDF mit Chart exportieren</button></div>
+          <div class="battery-result-grid"><div><span>Erwartete Laufzeit</span><strong id="batteryRuntime">—</strong></div><div><span>Szenarien P10–P90</span><strong id="batteryBand">—</strong></div><div><span>Erwartete Leistung</span><strong id="batteryPower">—</strong></div></div>
+          <div id="batteryChart" class="chart large-chart" aria-label="Laufzeitkurve mit Min/Max- und Perzentilbändern"></div>
+          <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
+        </div>
+      </div>
+      <div class="card table-card">
+        <div class="card-title-row"><div><h3>Übernommene Messstatistik</h3><p>Gewichtete Stichprobenvarianz einschließlich Unterschieden zwischen den Messungen. Jeder Zyklus erhält den Messungsanteil / Zyklusanzahl; bei gleichen Zyklusgewichten entspricht die Korrektur n − 1. Sleep-Leistung wird für die frei gewählte Sleep-Dauer normiert.</p></div></div>
+        <div class="event-scroll"><table><thead><tr><th>Kennwert</th><th>Mittelwert</th><th>Minimum</th><th>Maximum</th><th>Standardabweichung</th><th>Varianz</th></tr></thead><tbody id="batteryStatisticsRows"></tbody></table></div>
+      </div>
+      <div class="card table-card">
+        <div class="card-title-row"><div><h3>Laufzeit-Perzentile für deine Einstellung</h3><p>Jeder beobachtete Zyklus bildet ein Szenario, als würde sich sein Verbrauch wiederholen. Szenarien werden nach dem gewählten Messungseinfluss gewichtet; Perzentile werden an den Mittelpunkten der kumulierten Gewichte linear interpoliert. Min/Max umfassen nur Messungen mit positivem Einfluss.</p></div></div>
+        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Laufzeit</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
+        <p class="form-hint battery-assumptions">Das Szenarioband ist kein Konfidenzintervall und keine kalibrierte Wahrscheinlichkeit der tatsächlichen Batterielaufzeit. Die Wake-Energie und Wake-Dauer entsprechen der Messung; Sleep-Energie skaliert mit der geplanten Sleep-Dauer. Batterieenergie bedeutet die an der Messspannung nutzbare Energie. Selbstentladung, Alterung und Änderungen des Gerätezustands sind nicht modelliert.</p>
+      </div>
+    </section>
+
     <section id="sessionView" class="view">
       <div class="detail-toolbar">
         <button class="secondary" id="backToLive">← Aktiv</button><div class="spacer"></div>
@@ -84,6 +127,10 @@
             <div class="chart-actions"><button class="secondary compact" id="liveFollowBtn">● Live folgen</button><div class="segmented"><button class="active" data-live-scale="log">Log</button><button data-live-scale="linear">Linear</button></div></div>
           </div>
           <div id="liveChart" class="chart"></div>
+        </div>
+        <div class="card table-card wake-event-table-card">
+          <div class="card-title-row"><div><h3>Gültige Wake-Phasen <span class="event-count" id="liveWakePhaseCount">0</span></h3><p>Vollständig bestätigte Sleep → Wake → Sleep-Zyklen. Startzeit seit Protokollbeginn; offene Phasen und Zyklen mit unzulässigen Datenlücken bleiben ausgeschlossen.</p></div></div>
+          <div class="event-scroll"><table><thead><tr><th scope="col">Wake</th><th scope="col">Startzeit</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Spitzenstrom</th><th scope="col">Ladung</th><th scope="col">Energie</th><th scope="col">Daten</th></tr></thead><tbody id="liveWakePhaseRows"><tr><td colspan="8">Noch keine gültige Wake-Phase abgeschlossen.</td></tr></tbody></table></div>
         </div>
         <div class="card chart-card spectrogram-card">
           <div class="card-title-row">
@@ -134,6 +181,20 @@
         <section class="card metric-group detail-neutral"><h3>Aktivität</h3><dl><div class="detail-wake"><dt>Wake-Ereignisse</dt><dd id="detailWake">—</dd></div><div class="detail-wake"><dt>Wake-Zeitanteil</dt><dd id="detailDuty">—</dd></div></dl></section>
         <section class="card metric-group detail-energy"><h3>Verbrauch</h3><dl><div><dt>Gesamtladung</dt><dd id="detailCharge">—</dd></div><div><dt>Gesamtenergie</dt><dd id="detailEnergy">—</dd></div></dl></section>
       </div>
+      <section class="card table-card" aria-labelledby="detailSleepTitle">
+        <div class="card-title-row"><div><h3 id="detailSleepTitle" class="detail-sleep">Sleep-Auswertung</h3><p id="detailSleepNote"></p></div><button class="secondary" id="batteryFromMeasurement">Batterielaufzeit berechnen</button></div>
+        <div class="kpi-grid detail-kpis">
+          <div class="kpi"><span>Erfasste Sleep-Zeit</span><strong id="detailSleepTime">—</strong></div>
+          <div class="kpi"><span>Ø Strom · erfasster Sleep</span><strong id="detailSleepCurrent">—</strong></div>
+          <div class="kpi"><span>Sleep-Ladung</span><strong id="detailSleepCharge">—</strong></div>
+          <div class="kpi"><span>Sleep-Energie</span><strong id="detailSleepEnergy">—</strong></div>
+          <div class="kpi"><span>Ø Sleep-Dauer · gültige Zyklen</span><strong id="detailSleepValidDuration">—</strong></div>
+          <div class="kpi"><span>Ø Sleep-Energie · gültige Zyklen</span><strong id="detailSleepValidEnergy">—</strong></div>
+        </div>
+        <h4>Sleep-Phasen aus gültigen Zyklen <span class="event-count" id="detailSleepPhaseCount">0</span></h4>
+        <p class="form-hint">Vollständig bestätigte Sleep → Wake → Sleep-Zyklen. Startzeiten seit Protokollbeginn. Kleine zulässige Datenlücken werden ergänzt und gekennzeichnet.</p>
+        <div class="event-scroll"><table><thead><tr><th scope="col">Sleep</th><th scope="col">Startzeit</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Ladung</th><th scope="col">Energie</th><th scope="col">Daten</th></tr></thead><tbody id="detailSleepPhaseRows"></tbody></table></div>
+      </section>
       <div id="historyOverviewCard" class="card chart-card detail-protocol-card"><div class="card-title-row"><div><h3 id="historyOverviewTitle">Sleep / Wake-Verlauf</h3><p id="historyOverviewSubtitle">Exakte Zustandswechsel auf der Messzeitachse</p></div><div class="detail-state-legend"><span class="detail-sleep">Sleep</span><span class="detail-wake">Wake</span></div></div><div id="historyOverviewChart" class="chart large-chart"></div></div>
       <div id="wakeEventCard" class="card chart-card hidden"><div class="card-title-row"><div><h3 id="wakeEventTitle">Wake Event</h3><p id="wakeEventSubtitle">100-kS/s-Rohdaten</p></div><div class="event-chart-actions"><button class="secondary" id="backToOverview">← Zustandsübersicht</button><div class="segmented" id="historyScaleControls"><button class="active" data-history-scale="log">Log</button><button data-history-scale="linear">Linear</button></div><label class="smoothing-control" title="Maximale Zahl angezeigter Punkte. Beim Hineinzoomen werden feinere Daten bis zu allen Rohsamples nachgeladen."><span>Punkte / Ansicht</span><input id="eventPointBudget" type="number" min="100" max="50000" step="100" value="25000" aria-label="Maximale Punkte pro Ansicht" style="width:100px"></label><label class="smoothing-control" title="Adaptive Gl?ttung reduziert Rauschen und erh?lt starke Spr?nge. Nur die Darstellung wird ver?ndert."><span>Gl?ttung</span><select id="historySmoothing" aria-label="Gl?ttung des Stromverlaufs"><option value="off">Aus</option><option value="light">Leicht</option><option value="medium">Mittel</option><option value="strong">Stark</option></select></label></div></div><div id="wakeEventStatus" class="event-loading hidden" role="status"></div><div id="wakeEventChart" class="chart large-chart"></div></div>
       <div class="card table-card wake-event-table-card"><div class="card-title-row"><div><h3>Ereignisprotokoll <span class="event-count" id="wakeEventCount">0</span></h3><p>Ereignis auswählen, um Stromverlauf und Rohdaten zu öffnen.</p></div></div><div class="event-scroll"><table><thead><tr><th scope="col">Ereignis</th><th scope="col">Zeitpunkt</th><th scope="col">Periode</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Spitzenstrom</th><th scope="col">Ladung</th><th scope="col">D0–D7</th></tr></thead><tbody id="eventRows"></tbody></table></div></div>
@@ -290,8 +351,9 @@
 <div id="currentChartTooltip" class="current-chart-tooltip hidden" role="tooltip"></div>
 <script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>
 <script src="/static/time-inputs.js?v=1.0.6-time-units"></script>
-<script src="/static/cycle-energy.js?v=1.0.6-detail-layout"></script>
-<script src="/static/live-stream.js?v=1.0.6-live-spectrum-ui"></script>
+<script src="/static/cycle-energy.js?v=1.0.6-wake-variance"></script>
+<script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/app.js?v=1.0.6-live-spectrum-ui"></script>
+<script src="/static/battery-life.js?v=1.0.6-multi-battery-life"></script>
+<script src="/static/app.js?v=1.0.6-battery-life"></script>
 </body></html>

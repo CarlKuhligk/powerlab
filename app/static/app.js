@@ -97,9 +97,9 @@ function setView(name){
   state.view=name;++state.navigationToken;++state.historyRenderToken;
   if(name!=='session'){closeSessionWs();state.sessionMeasurement=null;}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav').forEach(v=>v.classList.remove('active'));
-  const map={live:'liveView',session:'sessionView',measurements:'measurementsView',detail:'detailView'};$(map[name]).classList.add('active');
+  const map={live:'liveView',session:'sessionView',measurements:'measurementsView',detail:'detailView',battery:'batteryView'};$(map[name]).classList.add('active');
   const nav=document.querySelector(`.nav[data-view="${name==='session'?'live':name==='detail'?'measurements':name}"]`);if(nav)nav.classList.add('active');
-  const titles={live:['Aktiv','Laufende und geplante PPK2-Messungen'],session:['Aktiv · Messung','Setup und Live-Daten der ausgewählten Session'],measurements:['Messungen','Historie durchsuchen, analysieren und exportieren'],detail:['Messprotokoll','Kennzahlen, Zustandsverlauf und Ereignisse']};
+  const titles={live:['Aktiv','Laufende und geplante PPK2-Messungen'],session:['Aktiv · Messung','Setup und Live-Daten der ausgewählten Session'],measurements:['Messungen','Historie durchsuchen, analysieren und exportieren'],detail:['Messprotokoll','Kennzahlen, Zustandsverlauf und Ereignisse'],battery:['Batterielaufzeit','Batterieenergie und Geräteeinstellung mit gemessener Streuung vergleichen']};
   [$('pageTitle').textContent,$('pageSubtitle').textContent]=titles[name];
 }
 
@@ -219,6 +219,7 @@ async function openSession(id){
   try{const m=await api(`/api/measurements/${id}`);if(token!==state.navigationToken)return;if(!['scheduled','starting','recording'].includes(m.status)){return openMeasurement(id)}state.sessionMeasurement=m;renderSession(m);setView('session');if(m.status==='recording'||m.status==='starting')connectSessionLive(id);else closeSessionWs()}catch(err){if(token===state.navigationToken)toast(err.message,true)}
 }
 function renderSession(m){
+  renderLiveWakePhases(m.cycle_energy?.valid_wake_phases||[]);
   $('sessionStopBtn').disabled=state.sessionStopPendingId===m.id;
   $('sessionStopBtn').textContent=state.sessionStopPendingId===m.id?'Stoppt …':'■ Stop';
   $('sessionStatus').textContent=String(m.status||'').toUpperCase();$('sessionName').textContent=m.name;$('sessionMeta').textContent=[m.project,m.device,m.firmware].filter(Boolean).join(' · ')||'Ohne Metadaten';
@@ -249,7 +250,10 @@ function connectSessionLive(id,{reconnect=false}={}){
     const frame=JSON.parse(e.data),d=frame.snapshot;
     if(d.running){
       state.lastLiveSnapshot=d;
-      if(frame.series)state.liveStreamSeries=mergeLiveFrame(state.liveStreamSeries,frame);
+      if(frame.series){
+        state.liveStreamSeries=mergeLiveFrame(state.liveStreamSeries,frame);
+        if(frame.reset)renderLiveWakePhases(state.liveStreamSeries.valid_wake_phases||[]);
+      }
       queueLiveStreamRender();
       renderSessionLive(d);
     }else{
@@ -419,6 +423,10 @@ function bindLiveChartInteractions(){
     }
   });
 }
+function renderLiveWakePhases(phases){
+  $('liveWakePhaseCount').textContent=String(phases.length);
+  $('liveWakePhaseRows').innerHTML=phases.map(p=>`<tr><td>Wake #${Number(p.sequence)}</td><td>${escapeHtml(fmtDuration(p.start_s))}</td><td>${escapeHtml(fmtEventDuration(p.duration_s*1e6))}</td><td>${escapeHtml(fmtCurrent(p.mean_ua))}</td><td>${escapeHtml(fmtCurrent(p.peak_ua))}</td><td>${escapeHtml(fmtCharge(p.charge_uc))}</td><td>${escapeHtml(fmtEnergy(p.energy_uwh))}</td><td>${p.interpolated_samples?'Mit ergänzten Daten':'Vollständig'}</td></tr>`).join('')||'<tr><td colspan="8">Noch keine gültige Wake-Phase abgeschlossen.</td></tr>';
+}
 function renderSessionLive(d,force=false){
   const stopping=d.stopping||state.sessionStopPendingId===d.measurement_id;
   $('sessionStopBtn').disabled=!!stopping;$('sessionStopBtn').textContent=stopping?'Stoppt …':'■ Stop';
@@ -585,7 +593,17 @@ function renderDetectionMetadata(m){
   $('detailDetectionSection').classList.toggle('hidden',!groups.length);
 }
 
+function renderSleepAnalysis(data){
+  for(const [id,key,format] of [['Time','recorded_duration_s',fmtDuration],['Current','average_current_ua',fmtCurrent],['Charge','charge_uc',fmtCharge],['Energy','energy_uwh',fmtEnergy],['ValidDuration','average_valid_duration_s',fmtDuration],['ValidEnergy','average_valid_energy_uwh',fmtEnergy]]){
+    $(`detailSleep${id}`).textContent=format(data?.[key]??null);
+  }
+  $('detailSleepNote').textContent=`${data?.recorded_segment_count??0} gespeicherte Sleep-Abschnitte, ${data?.background_count??0} zugeordnete Hintergrundereignisse. Die erfassten Kennwerte zählen empfangene Samples ohne Ergänzung von Datenlücken, auch ohne vollständigen Wake-Zyklus. Speicher-Checkpoints sind keine eigenen Sleep-Phasen.`;
+  const phases=data?.valid_phases||[];
+  $('detailSleepPhaseCount').textContent=String(phases.length);
+  $('detailSleepPhaseRows').innerHTML=phases.map(p=>`<tr><td>Vor Wake #${Number(p.following_wake_sequence)}</td><td>${escapeHtml(fmtDuration(p.start_s))}</td><td>${escapeHtml(fmtDuration(p.duration_s))}</td><td>${escapeHtml(fmtCurrent(p.mean_ua))}</td><td>${escapeHtml(fmtCharge(p.charge_uc))}</td><td>${escapeHtml(fmtEnergy(p.energy_uwh))}</td><td>${p.interpolated_samples?'Mit ergänzten Daten':'Vollständig'}</td></tr>`).join('')||'<tr><td colspan="7">Keine Sleep-Phase aus einem gültigen Zyklus verfügbar.</td></tr>';
+}
 function renderMeasurementDetail(m,overview){
+  renderSleepAnalysis(m.sleep_analysis);
   const a=overview.analysis||{};
   CycleEnergyUI.render(m.cycle_energy||a.confirmed_cycles,'detail');
   $('detailStatus').textContent=({completed:'Abgeschlossen',failed:'Fehlgeschlagen',cancelled:'Abgebrochen',recording:'Aufzeichnung',scheduled:'Geplant',starting:'Startet'})[m.status]||m.status||'—';
@@ -963,7 +981,8 @@ $('backToOverview').addEventListener('click',()=>{cancelEventLoad();state.histor
 $('backToMeasurements').addEventListener('click',()=>{++state.historyRenderToken;state.currentEvent=null;selectEventRow(null);setView('measurements');loadMeasurements()});
 $('exportBtn').addEventListener('click',()=> $('exportBtn').parentElement.classList.toggle('open'));document.addEventListener('click',e=>{if(!e.target.closest('.dropdown'))document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open'))});
 $('editMeasurement').addEventListener('click',()=>{const m=state.currentMeasurement;if(!m)return;const f=$('editForm');for(const k of ['name','project','device','firmware','notes'])f.elements[k].value=m[k]||'';$('editDialog').showModal()});document.querySelectorAll('[data-close-edit]').forEach(b=>b.addEventListener('click',()=>$('editDialog').close()));$('editForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),payload=Object.fromEntries(['name','project','device','firmware','notes'].map(k=>[k,f.get(k)]));try{await api(`/api/measurements/${state.currentMeasurement.id}`,{method:'PATCH',body:JSON.stringify(payload)});$('editDialog').close();toast('Metadaten gespeichert');await openMeasurement(state.currentMeasurement.id);await loadMeasurements()}catch(err){toast(err.message,true)}});$('deleteMeasurement').addEventListener('click',async()=>{const m=state.currentMeasurement;if(!m||!confirm(`Messung „${m.name}“ wirklich löschen?`))return;try{await api(`/api/measurements/${m.id}`,{method:'DELETE'});toast('Messung gelöscht');await loadMeasurements();setView('measurements')}catch(e){toast(e.message,true)}});
-document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.view;closeSessionWs();setView(v);if(v==='measurements')loadMeasurements()}));
+document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.view;closeSessionWs();setView(v);if(v==='measurements')loadMeasurements();if(v==='battery')BatteryLifeUI.open()}));
+$('batteryFromMeasurement').addEventListener('click',()=>{const id=state.currentMeasurement?.id;setView('battery');BatteryLifeUI.open(id)});
 
 async function init(){setDialogDefaults();renderDevices(state.devices);startDeviceDiscovery();await Promise.allSettled([loadMeasurements(),api('/api/live').then(renderLiveOverview),api('/api/version').then(({version})=>{$('appVersion').textContent=version})]);connectOverview()}
 init();
@@ -997,6 +1016,7 @@ CurrentInputs.install();
 TimeInputs.install();
 CycleEnergyUI.install();
 MeasurementPreview.install();
+BatteryLifeUI.install();
 $('measurementForm').addEventListener('input',updateEventSettings);
 $('detectionMode').addEventListener('change',updateEventSettings);
 updateEventSettings();

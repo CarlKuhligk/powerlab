@@ -5,6 +5,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import OverviewPoint, SleepSegment, WakeEvent
 from app.display_summary import compact_summaries
 from app.main import create_app
 from app.ppk.base import SampleBatch
@@ -22,6 +23,44 @@ def stub_snapshot(manager, monkeypatch):
     monkeypatch.setattr(manager, "active_snapshot", lambda mid, **kw: {
         "measurement_id": mid, "running": mid in manager._active,
     })
+
+
+def test_valid_wake_phases_arrive_after_sleep_confirmation_and_on_reconnect(tmp_path, monkeypatch):
+    asyncio.run(_check_valid_wake_phases(tmp_path, monkeypatch))
+
+
+async def _check_valid_wake_phases(tmp_path, monkeypatch):
+    manager = build_manager(tmp_path)
+    active = make_active(manager, 'wake-table', 5000)
+    stub_snapshot(manager, monkeypatch)
+    rate = manager.settings.sample_rate_hz
+    with manager.db.session() as session:
+        session.add(SleepSegment(measurement_id='wake-table', start_sample=0, end_sample=999,
+                                sample_count=1000, mean_ua=4, min_ua=4, max_ua=4,
+                                std_ua=0, charge_uc=4000/rate))
+        session.add(WakeEvent(measurement_id='wake-table', sequence=7, start_sample=1000,
+                             trigger_sample=1000, end_sample=1999, duration_us=1000/rate*1e6,
+                             mean_ua=1000, peak_ua=1500, charge_uc=1000000/rate, raw_file=''))
+        for kind, tick in [('sleep_start',0),('sleep_validated',100),
+                           ('wake_start',1000),('wake_validated',1100),('sleep_start',2000)]:
+            session.add(OverviewPoint(measurement_id='wake-table', kind=kind, sample_index=tick, current_ua=4))
+    sub = manager.subscribe_live('wake-table')
+    first = manager.live_frame('wake-table', sub)
+    assert first['series']['valid_wake_phases'] == []
+    with manager.db.session() as session:
+        session.add(OverviewPoint(measurement_id='wake-table', kind='sleep_validated', sample_index=2100, current_ua=4))
+    active.stream_metadata_revision += 1
+    confirmed = manager.live_frame('wake-table', sub)
+    assert confirmed['reset']
+    phases = confirmed['series']['valid_wake_phases']
+    assert len(phases) == 1 and phases[0]['sequence'] == 7
+    assert phases[0]['mean_ua'] == 1000 and phases[0]['peak_ua'] == 1500
+    delta = manager.live_frame('wake-table', sub)
+    assert not delta['reset'] and 'valid_wake_phases' not in delta['series']
+    other = manager.subscribe_live('wake-table')
+    assert manager.live_frame('wake-table', other)['series']['valid_wake_phases'] == phases
+    manager.unsubscribe_live('wake-table', sub)
+    manager.unsubscribe_live('wake-table', other)
 
 
 def test_initial_sync_then_only_new_blocks_and_independent_reconnect(tmp_path, monkeypatch):

@@ -1,0 +1,30 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+
+test('live wake rows survive deltas, update on reset and clear for another session',()=>{
+  const elements=new Map();
+  const element=id=>{if(!elements.has(id))elements.set(id,{textContent:'',innerHTML:''});return elements.get(id)};
+  const app=fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8');
+  const render=app.slice(app.indexOf('function renderLiveWakePhases('),app.indexOf('function renderSessionLive('));
+  const stream=fs.readFileSync(path.join(__dirname,'../app/static/live-stream.js'),'utf8');
+  const context=vm.createContext({$:element,escapeHtml:String,fmtDuration:String,fmtEventDuration:String,fmtCurrent:String,fmtCharge:String,fmtEnergy:String});
+  vm.runInContext(stream+'\n'+render,context);
+  const phase={sequence:7,start_s:1,duration_s:.2,mean_ua:1000,peak_ua:1500,charge_uc:200,energy_uwh:.183,interpolated_samples:0};
+  let series=context.mergeLiveFrame(null,{reset:true,series:{valid_wake_phases:[phase]}});
+  context.renderLiveWakePhases(series.valid_wake_phases);
+  assert.equal(element('liveWakePhaseCount').textContent,'1');
+  assert.match(element('liveWakePhaseRows').innerHTML,/Wake #7/);
+  series=context.mergeLiveFrame(series,{reset:false,series:{events:[],summary_points:[]}});
+  assert.equal(series.valid_wake_phases.length,1);
+  series=context.mergeLiveFrame(series,{reset:true,series:{valid_wake_phases:[phase,{...phase,sequence:8,interpolated_samples:16}]}});
+  context.renderLiveWakePhases(series.valid_wake_phases);
+  assert.equal(element('liveWakePhaseCount').textContent,'2');
+  assert.match(element('liveWakePhaseRows').innerHTML,/Mit ergänzten Daten/);
+  context.renderLiveWakePhases([]);
+  assert.equal(element('liveWakePhaseCount').textContent,'0');
+  assert.match(element('liveWakePhaseRows').innerHTML,/Noch keine gültige Wake-Phase/);
+  assert.doesNotMatch(element('liveWakePhaseRows').innerHTML,/Wake #7/);
+});
