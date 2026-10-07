@@ -31,6 +31,14 @@ jobs:
         shell: bash
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
+      - name: Set build version
+        id: version
+        shell: bash
+        run: |
+          version="build-${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "### PowerLab version: $version" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -40,11 +48,14 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
+            type=raw,value=${{ steps.version.outputs.value }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=sha
           flavor: latest=false
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
 
       - name: Build image
         uses: docker/build-push-action@v7
@@ -55,20 +66,25 @@ jobs:
           load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            POWERLAB_VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Test container startup
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_VERSION: ${{ steps.version.outputs.value }}
         shell: bash
         run: |
           set -euo pipefail
           image_tag="${IMAGE_TAGS%%$'\n'*}"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image_tag")" = "$EXPECTED_VERSION"
           docker run --detach --name powerlab-smoke "$image_tag"
           for attempt in $(seq 1 60); do
             status=$(docker inspect --format '{{.State.Health.Status}}' powerlab-smoke)
             if [ "$status" = healthy ]; then
+              docker exec --env EXPECTED_VERSION="$EXPECTED_VERSION" powerlab-smoke python -c "import json, os, urllib.request; expected = os.environ['EXPECTED_VERSION']; assert os.environ['POWERLAB_VERSION'] == expected; assert json.load(urllib.request.urlopen('http://127.0.0.1:8889/api/version', timeout=5))['version'] == expected; assert json.load(urllib.request.urlopen('http://127.0.0.1:8889/openapi.json', timeout=5))['info']['version'] == expected"
               docker exec powerlab-smoke python -c "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8889/api/devices', timeout=5); assert isinstance(json.load(response)['ppk2'], list)"
               exit 0
             fi

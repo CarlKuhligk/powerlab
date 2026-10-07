@@ -441,6 +441,7 @@ function updateSpectralSettings(){ $('spectralSettings').classList.toggle('hidde
 $('detectionMode').addEventListener('change',updateSpectralSettings);
 $('spectrogramToggle').addEventListener('change',()=>{
   $('spectrogramPanel').classList.toggle('hidden',!$('spectrogramToggle').checked);
+  $('spectrogramToggle').setAttribute('aria-expanded',String($('spectrogramToggle').checked));
   queueLiveStreamRender();
 });
 document.querySelectorAll('[data-live-scale]').forEach(b=>b.addEventListener('click',()=>{state.liveScale=b.dataset.liveScale;document.querySelectorAll('[data-live-scale]').forEach(x=>x.classList.toggle('active',x===b));refreshLiveSeries({force:true,range:state.liveFollow?null:state.liveFullRange})}));
@@ -964,7 +965,7 @@ $('exportBtn').addEventListener('click',()=> $('exportBtn').parentElement.classL
 $('editMeasurement').addEventListener('click',()=>{const m=state.currentMeasurement;if(!m)return;const f=$('editForm');for(const k of ['name','project','device','firmware','notes'])f.elements[k].value=m[k]||'';$('editDialog').showModal()});document.querySelectorAll('[data-close-edit]').forEach(b=>b.addEventListener('click',()=>$('editDialog').close()));$('editForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),payload=Object.fromEntries(['name','project','device','firmware','notes'].map(k=>[k,f.get(k)]));try{await api(`/api/measurements/${state.currentMeasurement.id}`,{method:'PATCH',body:JSON.stringify(payload)});$('editDialog').close();toast('Metadaten gespeichert');await openMeasurement(state.currentMeasurement.id);await loadMeasurements()}catch(err){toast(err.message,true)}});$('deleteMeasurement').addEventListener('click',async()=>{const m=state.currentMeasurement;if(!m||!confirm(`Messung „${m.name}“ wirklich löschen?`))return;try{await api(`/api/measurements/${m.id}`,{method:'DELETE'});toast('Messung gelöscht');await loadMeasurements();setView('measurements')}catch(e){toast(e.message,true)}});
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.view;closeSessionWs();setView(v);if(v==='measurements')loadMeasurements()}));
 
-async function init(){setDialogDefaults();renderDevices(state.devices);startDeviceDiscovery();await Promise.allSettled([loadMeasurements(),api('/api/live').then(renderLiveOverview)]);connectOverview()}
+async function init(){setDialogDefaults();renderDevices(state.devices);startDeviceDiscovery();await Promise.allSettled([loadMeasurements(),api('/api/live').then(renderLiveOverview),api('/api/version').then(({version})=>{$('appVersion').textContent=version})]);connectOverview()}
 init();
 
 function renderThresholdPreview(){

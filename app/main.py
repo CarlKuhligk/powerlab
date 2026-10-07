@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
+from . import __version__
 from .config import Settings, get_settings
 from .db import Database
 from .manager import MeasurementManager
@@ -50,7 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="PowerLab",
-        version="1.0.6",
+        version=__version__,
         description="100 kS/s power profiling and scheduled measurement management for Nordic PPK2.",
         lifespan=lifespan,
     )
@@ -62,6 +63,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     async def index():
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/api/version")
+    async def version():
+        return {"version": __version__}
 
     @app.get("/api/system")
     async def system_status():

@@ -49,9 +49,11 @@ async function renderLiveSpectrogram(series){
   if(!document.getElementById('spectrogramToggle').checked)return;
   const spectral=series?.spectrogram,frames=spectral?.frames||[];
   const hint=document.getElementById('spectrogramHint');
-  hint.textContent=frames.length?`Letzte ${spectral.history_s} s · ${Math.round(spectral.window_s*1000)}-ms-Fenster · ${(1/spectral.window_s).toLocaleString('de-DE',{maximumFractionDigits:2})} Hz FFT-Abstand · Mittelwert entfernt · blaue Sleep- / gelbe Wake-Marker`:'Warte auf ein vollständiges 250-ms-Messfenster …';
+  hint.textContent=frames.length?`Letzte ${spectral.history_s} s · ${Math.round(spectral.window_s*1000)}-ms-Fenster · ${(1/spectral.window_s).toLocaleString('de-DE',{maximumFractionDigits:2})} Hz FFT-Abstand · Mittelwert entfernt`:'Warte auf ein vollständiges 250-ms-Messfenster …';
   const x=[],columns=[];
-  if(state.lastLiveSnapshot?.spectral_comparison)hint.textContent+=' · FFT Sleep: Türkis / FFT Wake: Pink (gestrichelt)';
+  const hasComparison=Boolean(state.lastLiveSnapshot?.spectral_comparison);
+  document.getElementById('spectrogramFftSleep').classList.toggle('hidden',!hasComparison);
+  document.getElementById('spectrogramFftWake').classList.toggle('hidden',!hasComparison);
   frames.forEach((f,i)=>{
     if(i&&f.t_s-frames[i-1].t_s>spectral.hop_s*1.01){
       x.push((f.t_s+frames[i-1].t_s)/2);columns.push(null);
@@ -60,17 +62,19 @@ async function renderLiveSpectrogram(series){
   });
   const frequencies=spectral?.frequencies_hz||[];
   const latest=frames.at(-1)?.t_s??0;
-  const markers=(series?.state_markers||[]).filter(m=>m.t_s>=latest-120&&m.t_s<=latest);
+  const history=spectral?.history_s||120;
+  const markers=(series?.state_markers||[]).filter(m=>m.t_s>=latest-history&&m.t_s<=latest);
   await Plotly.react(document.getElementById('spectrogramChart'),[{
     type:'heatmap',x,y:frequencies,z:frequencies.map((_,i)=>columns.map(c=>c?c[i]:null)),
     colorscale:'Viridis',zmin:-100,zmax:60,zsmooth:false,connectgaps:false,
-    colorbar:{title:{text:'dB re<br>1 µA²/Hz'},thickness:14},
+    colorbar:{title:{text:'Leistungsdichte [dB re 1 µA²/Hz]',side:'bottom'},orientation:'h',x:.5,xanchor:'center',y:-.3,yanchor:'top',len:.85,thickness:10,outlinewidth:0,tickfont:{color:'#87929d',size:10}},
     hovertemplate:'t=%{x:.3f} s<br>f=%{y:.1f} Hz<br>%{z:.1f} dB re 1 µA²/Hz<extra></extra>'
   }],{
     paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:11},
-    margin:{l:82,r:100,t:12,b:60},
-    xaxis:{title:{text:series?.phase==='startup'?'Zeit seit Einschalten [s]':'Zeit seit Sleep Start [s]'},range:[Math.max(0,latest-120),Math.max(.25,latest)],gridcolor:'#222a31'},
-    yaxis:{title:{text:'Frequenz [Hz]'},type:'log',gridcolor:'#222a31'},
+    margin:{l:64,r:24,t:10,b:112},
+    xaxis:{title:{text:series?.phase==='startup'?'Zeit seit Einschalten [s]':'Zeit seit Sleep Start [s]',standoff:12},range:[Math.max(0,latest-history),Math.max(.25,latest)],gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,automargin:true},
+    yaxis:{title:{text:'Frequenz [Hz]',standoff:10},type:'log',gridcolor:'#222a31',color:'#aeb8c2',automargin:true},
+    hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},
     shapes:sleepStartShapes(markers),showlegend:false
   },{...plotConfig,scrollZoom:false});
 }

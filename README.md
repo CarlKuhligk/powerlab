@@ -1,4 +1,4 @@
-# PowerLab v1.0.6
+# PowerLab
 
 ## Sleep/Wake-Erkennung
 
@@ -22,7 +22,7 @@ PowerLab ist eine lokale Mess- und Analyseanwendung für **Nordic Power Profiler
 
 Die Anwendung arbeitet ausschließlich mit echten PPK2-Geräten. Ein Simulations-/Mock-Treiber ist nicht enthalten.
 
-## History-Analyse in v1.0.6
+## History-Analyse
 
 Abgeschlossene Messungen verwenden eine kompakte Sleep/Wake-Zustands-Timeline. Wake-Marker öffnen weiterhin die exakten 100-kS/s-Rohdaten. Die Statistik berechnet mittlere Periodendauer, gewichteten Sleep- und Wake-Strom, mittlere Wake-Dauer und Wake-Duty-Cycle.
 
@@ -434,7 +434,7 @@ prueft den Healthcheck und die Geraete-API ohne angeschlossenes PPK2.
 - Pull Requests nach `main`: Image bauen und testen.
 - Push nach `main`: nach erfolgreichem Test nach GHCR hochladen, mit `latest`
   und einem Commit-Tag (`sha-...`).
-- Versionstags wie `v1.0.6`: nach erfolgreichem Test als `1.0.6` und mit
+- Versionstags mit dem Präfix `v`: nach erfolgreichem Test als Release-Tag und mit
   Commit-Tag hochladen. `latest` bleibt beim Stand von `main`.
 - Manuell unter GitHub **Actions > Docker image > Run workflow** starten.
   Hochgeladen wird nur von der Standardbranch oder einem `v`-Tag.
@@ -443,6 +443,17 @@ Der Image-Name wird automatisch aus dem Repository abgeleitet. Fuer
 `CarlKuhligk/powerlab` lautet er `ghcr.io/carlkuhligk/powerlab`.
 Der Workflow nutzt den bereitgestellten `GITHUB_TOKEN`; zusaetzliche Secrets
 oder ein CI-Tool auf dem Windows-PC sind nicht erforderlich.
+
+Jeder Workflow-Lauf erhält eine automatisch gezählte Build-Version nach dem
+Schema `build-<Laufnummer>.<Versuch>`. Die Laufnummer steigt bei jedem neuen
+Lauf dieses Workflows; bei einer Wiederholung steigt die Versuchsnummer.
+Auch Pull-Request-Builds zählen mit. Veröffentlichte Images erhalten diese
+Version als zusätzlichen Tag. Sie ist außerdem im OCI-Label
+`org.opencontainers.image.version`, in der Container-Umgebungsvariable
+`POWERLAB_VERSION`, unter `/api/version`, in der API-Dokumentation und in der
+Weboberfläche hinterlegt. Die Build-Version steht auch in der Actions-Zusammenfassung.
+Lokale Builds verwenden standardmäßig `dev`; über `POWERLAB_VERSION` lässt sich
+bei Docker Compose eine eigene Version für Image-Tag und Build festlegen.
 
 Auf einem anderen PC mit Docker das fertige Image starten:
 
@@ -625,6 +636,6 @@ docker-compose.yml
 
 PowerLab verwendet derzeit `ppk2-api` für die PPK2-Kalibrierung und konvertiert/überwacht den Messstream in einer eigenen Adapter-Schicht. Für kalibrierpflichtige Laboranwendungen sollte die absolute Genauigkeit gegen eine bekannte Last und die aktuelle Nordic Power Profiler App verifiziert werden.
 
-## 1.0.6 UI/History fixes
+## UI/History fixes
 
 Wake-Event-Detail und Zustandsübersicht verwenden getrennte Chart-Container. Die Wake-Event-Liste bleibt sichtbar und zeigt zusätzlich die Periode zum vorherigen Wake. Im Live-Chart werden persistierte LOD-Historie und der aktuelle Live-Tail getrennt gerendert, damit keine künstliche Verbindungslinie über nicht dargestellte Zeitbereiche entsteht.

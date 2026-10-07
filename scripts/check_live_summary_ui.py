@@ -100,6 +100,17 @@ def main():
         assert 'FFT: WAKE' in page.locator('#kpiBackground').inner_text()
         assert page.evaluate("document.getElementById('spectrogramChart').data[0].z[2]") == [-20] * 8
         page.locator('#spectrogramChart').screenshot(path=str(ROOT / 'data/live-spectrogram.png'))
+        assert page.locator('#spectrogramToggle').get_attribute('aria-expanded') == 'true'
+        assert page.locator('#spectrogramFftWake').is_visible()
+        card = page.locator('.spectrogram-card')
+        card.screenshot(path=str(ROOT / 'data/live-spectrogram-card.png'))
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_timeout(400)
+        assert card.evaluate('(el) => el.scrollWidth <= el.clientWidth'), 'Spectrum card overflows on mobile'
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Page overflows on mobile'
+        card.screenshot(path=str(ROOT / 'data/live-spectrogram-mobile.png'))
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.wait_for_timeout(400)
         # The band consists of separate polygons around the two measured segments.
         assert page.evaluate("document.getElementById('liveChart').data[0].x.filter(x=>x===null).length") == 2
         assert page.evaluate("document.getElementById('liveChart').data[1].y.filter(y=>y!==null).every(y=>y<100)")
@@ -138,6 +149,7 @@ def main():
         assert page.evaluate("state.liveFullRange") == [30, 31]
         page.uncheck('#spectrogramToggle')
         assert not page.locator('#spectrogramPanel').is_visible()
+        assert page.locator('#spectrogramToggle').get_attribute('aria-expanded') == 'false'
         page.check('#spectrogramToggle')
         # Reconnection resynchronizes the cache without changing the user's zoom.
         sockets[-1].close()

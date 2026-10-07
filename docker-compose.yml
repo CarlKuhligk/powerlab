@@ -3,7 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: powerlab:1.0.6
+      args:
+        POWERLAB_VERSION: ${POWERLAB_VERSION:-dev}
+    image: powerlab:${POWERLAB_VERSION:-dev}
     container_name: powerlab
     restart: unless-stopped
     ports:

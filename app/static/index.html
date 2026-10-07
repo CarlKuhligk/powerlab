@@ -7,14 +7,14 @@
   <title>PowerLab</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-preview-ui">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-live-spectrum-ui">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <div><strong>PowerLab</strong><span>v1.0.6</span></div>
+      <div><strong>PowerLab</strong><span id="appVersion"></span></div>
     </div>
     <nav>
       <button class="nav active" data-view="live">◉ <span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
@@ -85,14 +85,20 @@
           </div>
           <div id="liveChart" class="chart"></div>
         </div>
-        <div class="card chart-card">
+        <div class="card chart-card spectrogram-card">
           <div class="card-title-row">
-            <div><h3>Live-Spektrogramm</h3><p>Frequenzanteile der Stromschwankungen · ergänzt die Zustandsanalyse</p></div>
-            <label class="spectrogram-toggle"><input type="checkbox" id="spectrogramToggle"> Anzeigen</label>
+            <div><h3 id="spectrogramTitle">Live-Spektrogramm</h3><p>Frequenzanteile der Stromschwankungen im zeitlichen Verlauf</p></div>
+            <label class="spectrogram-toggle"><input type="checkbox" id="spectrogramToggle" aria-controls="spectrogramPanel" aria-expanded="false"> Anzeigen</label>
           </div>
-          <div id="spectrogramPanel" class="hidden">
+          <div id="spectrogramPanel" class="hidden" role="region" aria-labelledby="spectrogramTitle">
             <p id="spectrogramHint">Warte auf Messdaten …</p>
-            <div id="spectrogramChart" class="chart"></div>
+            <div id="spectrogramChart" class="chart" aria-label="Live-Spektrogramm der Stromschwankungen"></div>
+            <div class="spectrogram-legend">
+              <span><i class="spectrogram-marker sleep" aria-hidden="true"></i>Sleep-Start</span>
+              <span><i class="spectrogram-marker wake" aria-hidden="true"></i>Wake-Start</span>
+              <span id="spectrogramFftSleep" class="hidden"><i class="spectrogram-marker fft-sleep" aria-hidden="true"></i>FFT Sleep</span>
+              <span id="spectrogramFftWake" class="hidden"><i class="spectrogram-marker fft-wake" aria-hidden="true"></i>FFT Wake</span>
+            </div>
           </div>
         </div>
       </div>
@@ -285,7 +291,7 @@
 <script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>
 <script src="/static/time-inputs.js?v=1.0.6-time-units"></script>
 <script src="/static/cycle-energy.js?v=1.0.6-detail-layout"></script>
-<script src="/static/live-stream.js?v=1.0.6-spectral-compare"></script>
+<script src="/static/live-stream.js?v=1.0.6-live-spectrum-ui"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/app.js?v=1.0.6-preview"></script>
+<script src="/static/app.js?v=1.0.6-live-spectrum-ui"></script>
 </body></html>

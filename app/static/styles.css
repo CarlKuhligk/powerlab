@@ -67,9 +67,24 @@ button:disabled{opacity:.45;cursor:default}
 .cycle-energy-card .kpi-grid{margin:14px 0}
 .cycle-energy-card table td,.cycle-energy-card table th{white-space:nowrap}
 .cycle-custom{display:flex;gap:8px;max-width:240px}.cycle-custom input{width:90px;min-width:0}.cycle-custom select{min-width:110px}
-.spectrogram-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap;cursor:pointer}
-.spectrogram-toggle input{width:16px;height:16px;padding:0;accent-color:var(--accent)}
-#spectrogramHint{font-size:12px;color:var(--muted)}
+.spectrogram-card{margin-top:14px;min-width:0}
+.spectrogram-card .card-title-row{align-items:center;margin-bottom:0}
+.spectrogram-card .card-title-row>div{min-width:0}
+.spectrogram-card .card-title-row p{line-height:1.5}
+.spectrogram-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid #323b45;border-radius:8px;background:#171c22;color:#d7dee5;font-size:11px;white-space:nowrap;cursor:pointer;flex-shrink:0}
+.spectrogram-toggle:hover{border-color:#4e765c}
+.spectrogram-toggle:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+.spectrogram-toggle:has(input:checked){background:#1f3025;border-color:#385441;color:var(--accent2)}
+.spectrogram-toggle input{width:14px;height:14px;padding:0;margin:0;accent-color:var(--accent)}
+#spectrogramPanel{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);min-width:0}
+.spectrogram-card #spectrogramHint{margin:0 0 8px;font-size:11px;line-height:1.6;color:var(--muted)}
+#spectrogramChart{height:360px;min-width:0}
+.spectrogram-legend{display:flex;flex-wrap:wrap;gap:8px 18px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.5}
+.spectrogram-legend>span{display:inline-flex;align-items:center;gap:7px}
+.spectrogram-marker{display:inline-block;width:14px;border-top:2px solid;flex-shrink:0}
+.spectrogram-marker.sleep{color:#60a5fa}.spectrogram-marker.wake{color:#f5bd5b}
+.spectrogram-marker.fft-sleep{color:#22d3ee;border-top-style:dashed}.spectrogram-marker.fft-wake{color:#f472b6;border-top-style:dashed}
+@media(max-width:600px){.spectrogram-card .card-title-row{align-items:flex-start;flex-wrap:wrap;gap:10px}#spectrogramChart{height:320px}.spectrogram-legend{gap:8px 14px}}
 
 /* Compact measurement setup with parameters directly below the selected mode. */
 #measurementDialog{width:min(940px,calc(100vw - 28px));max-height:calc(100dvh - 28px);overflow:auto;scroll-padding:24px 0 90px}
