@@ -140,7 +140,7 @@ const MeasurementPreview=(()=>{
     const extent=[...mean.filter(v=>v!==null),...hi.filter(v=>v!==null),settings.sleep_threshold_ua,settings.wake_threshold_ua];
     const minimum=Math.min(...lo.filter(v=>v!==null),settings.sleep_threshold_ua),maximum=Math.max(...extent,1);
     const chartWidth=$('measurementPreviewCurrent').clientWidth,compactChart=chartWidth<480;
-    const common={autosize:true,width:Math.max(220,chartWidth),paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:compactChart?10:11},margin:{l:compactChart?52:75,r:compactChart?12:25,t:15,b:50},showlegend:false};
+    const common={autosize:true,width:Math.max(220,chartWidth),paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:compactChart?10:11},margin:{l:compactChart?52:75,r:compactChart?12:25,t:15,b:50},showlegend:false};
     const xaxis={title:{text:compactChart?'Vorschau-Zeit [s]':'Zeit seit Vorschau-Start [s]'},range:follow?[data.start_s,Math.max(.25,data.latest_s)]:range,gridcolor:'#222a31'};
     const traces=[{type:'scatter',mode:'lines',x,y:transform(lo),line:{width:0},hoverinfo:'skip'},
       {type:'scatter',mode:'lines',x,y:transform(hi),line:{width:0},fill:'tonexty',fillcolor:'#65d98b22',hoverinfo:'skip'},

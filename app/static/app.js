@@ -61,6 +61,10 @@ function bindEventChartInteractions(d,unit){
     if(point.curveNumber===0){
       const raw=d.current_ua[index],display=eventDisplayCurrent(d)[index];
       details=d.aggregated?`Block-Extremwert: <strong>${escapeHtml(fmtCurrent(raw))}</strong><br>Zeitposition angenähert`:d.downsampled?`Rohsample aus Min/Max-Auswahl: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:(state.historySmoothing==='off'?`Strom: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:`Geglättet: <strong>${escapeHtml(fmtCurrent(display))}</strong><br>Rohwert: ${escapeHtml(fmtCurrent(raw))}`);
+      // Plotly can pick the current trace when a state marker shares its sample.
+      // Keep both the state and the sample value visible in that case.
+      const markerTrace=(el.data||[]).find(trace=>trace.meta?.role==='state-marker'&&trace.x.some((x,i)=>Number(x)===Number(point.x)&&Number(trace.y[i])===Number(point.y)));
+      if(markerTrace)details=`${escapeHtml(markerTrace.customdata[markerTrace.x.findIndex(x=>Number(x)===Number(point.x))])}<br>${details}`;
     }else if(point.data?.meta?.role==='state-marker'){
       details=escapeHtml(point.customdata||point.text||'Zustandswechsel');
     }else{
@@ -92,13 +96,13 @@ function localInput(isoOrDate){const d=isoOrDate instanceof Date?isoOrDate:new D
 function asIsoLocalInput(value){return value?new Date(value).toISOString():null}
 
 function setView(name){
-  hideCurrentTooltip();
+  hideCurrentTooltip();closeExportMenu();
   if(name!=='detail')cancelEventLoad();
   state.view=name;++state.navigationToken;++state.historyRenderToken;
   if(name!=='session'){closeSessionWs();state.sessionMeasurement=null;}
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav').forEach(v=>{v.classList.remove('active');v.ariaCurrent=null});
   const map={live:'liveView',session:'sessionView',measurements:'measurementsView',detail:'detailView',battery:'batteryView'};$(map[name]).classList.add('active');
-  const nav=document.querySelector(`.nav[data-view="${name==='session'?'live':name==='detail'?'measurements':name}"]`);if(nav)nav.classList.add('active');
+  const nav=document.querySelector(`.nav[data-view="${name==='session'?'live':name==='detail'?'measurements':name}"]`);if(nav){nav.classList.add('active');nav.ariaCurrent='page';}
   const titles={live:['Aktiv','Laufende und geplante PPK2-Messungen'],session:['Aktiv · Messung','Setup und Live-Daten der ausgewählten Session'],measurements:['Messungen','Historie durchsuchen, analysieren und exportieren'],detail:['Messprotokoll','Kennzahlen, Zustandsverlauf und Ereignisse'],battery:['Batterielaufzeit','Batterieenergie und Geräteeinstellung mit gemessener Streuung vergleichen']};
   [$('pageTitle').textContent,$('pageSubtitle').textContent]=titles[name];
 }
@@ -139,9 +143,10 @@ function renderSessionCards(containerId,items,scheduled=false,now=Date.now()){
     const id=String(scheduled?item.id:item.measurement_id);
     let card=existing.get(id);
     if(!card){
-      card=document.createElement('article');card.className='session-card';card.dataset.session=id;
+      card=document.createElement('article');card.className='session-card';card.dataset.session=id;card.tabIndex=0;card.role='button';
       card.innerHTML=`<div class="session-card-head"><div><div class="session-card-badges"><span class="status-badge ${scheduled?'scheduled':'recording'}" data-field="status"></span>${scheduled?'':'<span class="status-badge hidden" data-field="phase"></span>'}</div><h3 data-field="name"></h3><p data-field="device"></p></div></div><div class="session-card-grid"><div><span>${scheduled?'Start':'Gestartet'}</span><strong data-field="start"></strong></div><div><span>${scheduled?'Stop':'Auto-Stop'}</span><strong data-field="stop"></strong></div>${scheduled?'':'<div><span>Laufzeit</span><strong data-field="elapsed"></strong></div><div data-field="remainingRow"><span>Verbleibend</span><strong data-field="remaining"></strong></div>'}</div>`;
       card.addEventListener('click',()=>openSession(card.dataset.session));
+      card.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openSession(card.dataset.session)}});
     }
     const fields={status:scheduled?'GEPLANT':'RECORDING',name:item.name??'',device:`${item.port||'—'} · ${item.ppk2_id||'PPK2'}`,start:fmtDate(scheduled?item.scheduled_start_at:item.started_at),stop:scheduled||['wake_count','sleep_count'].includes(item.stop_mode)?scheduleStopText(item):item.planned_end_at?fmtDate(item.planned_end_at):'manuell'};
     if(!scheduled){
@@ -206,8 +211,8 @@ async function openMeasurementDialog(edit=null){await MeasurementPreview.reset()
   f.elements.detection_mode.value=['threshold','spectral_compare'].includes(s.detection_mode)?s.detection_mode:'threshold';f.elements.spectral_margin_db.value=s.spectral_margin_db??12;updateSpectralSettings();CurrentInputs.restore();TimeInputs.restore();
   f.elements.name.value=edit.name;f.elements.project.value=edit.project||'';f.elements.device.value=edit.device||'';f.elements.firmware.value=edit.firmware||'';f.elements.notes.value=edit.notes||'';f.elements.port.value=edit.port||'';f.elements.meter_mode.value=edit.meter_mode;f.elements.voltage_mv.value=edit.voltage_mv;
   f.elements.start_mode.value='scheduled';$('scheduledStartAt').value=localInput(edit.scheduled_start_at);f.elements.stop_mode.value=edit.stop_mode||'manual';f.elements.event_count.value=edit.event_count??edit.settings?.event_count??5;if(edit.requested_duration_s){f.elements.duration_value.value=(edit.requested_duration_s/60).toFixed(2);f.elements.duration_unit.value='60'}if(edit.scheduled_end_at)$('scheduledEndAt').value=localInput(edit.scheduled_end_at);
-  $('measurementDialogEyebrow').textContent='SCHEDULED SESSION';$('measurementDialogTitle').textContent='Planung bearbeiten';$('measurementSubmit').textContent='Änderungen speichern';
-}else{$('measurementDialogEyebrow').textContent='NEW SESSION';$('measurementDialogTitle').textContent='Messung anlegen';$('measurementSubmit').textContent='Messung anlegen'}updateScheduleFields();updateEventSettings();$('measurementDialog').showModal();$('measurementName').focus();$('measurementName').select()}
+  $('measurementDialogEyebrow').textContent='GEPLANTE MESSUNG';$('measurementDialogTitle').textContent='Planung bearbeiten';$('measurementSubmit').textContent='Änderungen speichern';
+}else{$('measurementDialogEyebrow').textContent='NEUE MESSUNG';$('measurementDialogTitle').textContent='Messung anlegen';$('measurementSubmit').textContent='Messung anlegen'}updateScheduleFields();updateEventSettings();$('measurementDialog').showModal();$('measurementName').focus();$('measurementName').select()}
 function closeMeasurementDialog(){$('measurementDialog').close();state.editScheduledId=null}
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.addEventListener('click',closeMeasurementDialog));$('newMeasurementBtn').addEventListener('click',()=>openMeasurementDialog());$('idleStartBtn').addEventListener('click',()=>openMeasurementDialog());
 function measurementPayload(){const f=new FormData($('measurementForm')),num=n=>{const input=$('measurementForm').elements[n];return input.dataset.currentUnit?CurrentInputs.ua(input):input.dataset.timeUnit?TimeInputs.value(input):Number(input.value)},startMode=f.get('start_mode'),stopMode=f.get('stop_mode');return{sleep_threshold_ua:num('sleep_threshold_ua'),wake_threshold_ua:num('wake_threshold_ua'),sleep_min_s:num('sleep_min_s'),wake_min_ms:num('wake_min_ms'),detection_mode:f.get('detection_mode'),spectral_margin_db:num('spectral_margin_db'),pre_trigger_ms:num('pre_trigger_ms'),post_trigger_ms:num('post_trigger_ms'),name:f.get('name'),project:f.get('project'),device:f.get('device'),firmware:f.get('firmware'),notes:f.get('notes'),port:f.get('port'),meter_mode:f.get('meter_mode'),voltage_mv:num('voltage_mv'),start_mode:startMode,scheduled_start_at:startMode==='scheduled'?asIsoLocalInput(f.get('scheduled_start_at')):null,stop_mode:stopMode,event_count:['wake_count','sleep_count'].includes(stopMode)?num('event_count'):null,duration_s:stopMode==='duration'?num('duration_value')*num('duration_unit'):null,scheduled_end_at:stopMode==='end'?asIsoLocalInput(f.get('scheduled_end_at')):null}}
@@ -342,7 +347,7 @@ function sleepStartShapes(markers,history=false){
 function liveLayout(measurementId,{range=null,latestS=0,unit={label:'µA'}}={}){
   const xaxis={title:{text:'Zeit seit Messbeginn [s]',standoff:14},gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,autorange:false,uirevision:state.liveFollow?`follow-${latestS}`:`fixed-${measurementId}`};
   if(range&&range.length===2)xaxis.range=range;else xaxis.range=[0,Math.max(.001,Number(latestS)||.001)];
-  return{paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:82,r:24,t:10,b:68},xaxis,yaxis:{title:{text:`Strom [${unit.label}]`,standoff:14},type:state.liveScale,gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,uirevision:`live-y-${measurementId}-${state.liveScale}-${unit.label}`},font:{color:'#c8d0d8',size:11},showlegend:false,hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',uirevision:`live-${measurementId}-${state.liveScale}`};
+  return{paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:82,r:24,t:10,b:68},xaxis,yaxis:{title:{text:`Strom [${unit.label}]`,standoff:14},type:state.liveScale,gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,uirevision:`live-y-${measurementId}-${state.liveScale}-${unit.label}`},font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:11},showlegend:false,hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',uirevision:`live-${measurementId}-${state.liveScale}`};
 }
 async function renderLiveSeries(series,d,token){
   const render=async()=>{
@@ -483,7 +488,7 @@ function renderMeasurementRows(){
   for(const id of state.selectedMeasurementIds)if(!validIds.has(id))state.selectedMeasurementIds.delete(id);
   const rows=visibleMeasurements();
   $('emptyMeasurements').classList.toggle('hidden',rows.length!==0);
-  $('measurementRows').innerHTML=rows.map(m=>`<tr data-id="${escapeHtml(m.id)}" class="${state.selectedMeasurementIds.has(m.id)?'selected':''}"><td class="measurement-select-cell"><input type="checkbox" data-select-measurement="${escapeHtml(m.id)}" aria-label="Messung ${escapeHtml(m.name)} auswählen" ${state.selectedMeasurementIds.has(m.id)?'checked':''} ${state.measurementBulkBusy?'disabled':''}></td><td>${escapeHtml(fmtDate(m.started_at||m.created_at))}</td><td><strong>${escapeHtml(m.name)}</strong></td><td>${escapeHtml([m.project,m.device].filter(Boolean).join(' · ')||'—')}</td><td>${escapeHtml(m.firmware||'—')}</td><td>${escapeHtml(fmtDuration(m.duration_s))}</td><td>${escapeHtml(fmtCurrent(m.sleep_current_ua))}</td><td>${Number(m.wake_count||0).toLocaleString('de-DE')}</td><td><span class="status-badge ${escapeHtml(m.status)}">${escapeHtml(m.status)}</span></td></tr>`).join('');
+  $('measurementRows').innerHTML=rows.map(m=>`<tr data-id="${escapeHtml(m.id)}" class="${state.selectedMeasurementIds.has(m.id)?'selected':''}"><td class="measurement-select-cell"><input type="checkbox" data-select-measurement="${escapeHtml(m.id)}" aria-label="Messung ${escapeHtml(m.name)} auswählen" ${state.selectedMeasurementIds.has(m.id)?'checked':''} ${state.measurementBulkBusy?'disabled':''}></td><td>${escapeHtml(fmtDate(m.started_at||m.created_at))}</td><td><button type="button" class="measurement-open" aria-label="Messung ${escapeHtml(m.name)} öffnen">${escapeHtml(m.name)}</button></td><td>${escapeHtml([m.project,m.device].filter(Boolean).join(' · ')||'—')}</td><td>${escapeHtml(m.firmware||'—')}</td><td>${escapeHtml(fmtDuration(m.duration_s))}</td><td>${escapeHtml(fmtCurrent(m.sleep_current_ua))}</td><td>${Number(m.wake_count||0).toLocaleString('de-DE')}</td><td><span class="status-badge ${escapeHtml(m.status)}">${escapeHtml(m.status)}</span></td></tr>`).join('');
   document.querySelectorAll('#measurementRows tr').forEach(r=>r.addEventListener('click',e=>{if(!e.target.closest('.measurement-select-cell'))openMeasurement(r.dataset.id)}));
   document.querySelectorAll('[data-select-measurement]').forEach(box=>box.addEventListener('change',()=>{
     if(state.measurementBulkBusy)return;
@@ -799,7 +804,7 @@ function renderOverviewChart(overview,{force=false}={}){
     paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:92,r:24,t:10,b:68},
     xaxis:{title:{text:'Zeit',standoff:14},gridcolor:'#222a31',color:'#aeb8c2',zeroline:false},
     yaxis:{title:{text:'Zustand',standoff:14},range:[-.18,1.18],tickmode:'array',tickvals:[0,1],ticktext:['Sleep','Wake'],gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,fixedrange:false},
-    font:{color:'#c8d0d8',size:11},hovermode:'closest',dragmode:'zoom',legend:{orientation:'h',y:1.08},
+    font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:11},hovermode:'closest',dragmode:'zoom',legend:{orientation:'h',y:1.08},
     shapes:sleepStartShapes(sleepStarts,true),showlegend:false,
     uirevision:`states-${state.currentMeasurement?.id}`
   };
@@ -990,7 +995,7 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
   showWakeEventPanel();
   selectEventRow(e.id);
   $('wakeEventTitle').textContent=`Wake Event #${e.sequence}`;
-  $('wakeEventSubtitle').innerHTML=`${escapeHtml(fmtDate(e.trigger_at))} · ${escapeHtml(fmtEventDuration(e.duration_us))} · Ø ${escapeHtml(fmtCurrent(e.mean_ua))} · Peak ${escapeHtml(fmtCurrent(e.peak_ua))} · <a href="/api/measurements/${state.currentMeasurement.id}/events/${e.id}/csv" style="color:#8ee7aa">Rohdaten CSV ↓</a>`;
+  $('wakeEventSubtitle').innerHTML=`${escapeHtml(fmtDate(e.trigger_at))} · ${escapeHtml(fmtEventDuration(e.duration_us))} · Ø ${escapeHtml(fmtCurrent(e.mean_ua))} · Peak ${escapeHtml(fmtCurrent(e.peak_ua))} · <a href="/api/measurements/${state.currentMeasurement.id}/events/${e.id}/csv">Rohdaten CSV ↓</a>`;
   if(smoothed)$('wakeEventSubtitle').innerHTML+=` · Glättung: ${{light:'leicht',medium:'mittel',strong:'stark'}[state.historySmoothing]} (nur Darstellung)`;
   const displayHint=d.display_notice||(d.aggregated||d.downsampled?'Die Ansicht zeigt eine Min/Max-Auswahl mit originalen Sample-Zeiten. Beim Zoomen werden feinere Daten bis zu den Rohsamples nachgeladen.':'Alle Rohsamples im sichtbaren Bereich werden angezeigt.');
   $('wakeEventSubtitle').innerHTML+=` · ${(d.t_us||[]).length.toLocaleString('de-DE')} Punkte <span class="field-help event-display-help"><button type="button" class="info-button" aria-label="Information zur Datendarstellung" aria-describedby="eventDisplayHint">i</button><span id="eventDisplayHint" class="field-tooltip" role="tooltip">${escapeHtml(displayHint)}</span></span>`;
@@ -1023,7 +1028,7 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
     xaxis:{title:{text:'Zeit relativ zum Trigger [µs]',standoff:14},gridcolor:'#222a31',color:'#aeb8c2',zeroline:true,zerolinecolor:'#58626c',showspikes:false,...(chartRange?{range:chartRange,autorange:false}:{})},
     yaxis:{title:{text:`Strom [${unit.label}]`,standoff:14},type:state.historyScale,gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,showspikes:false,domain:hasDigital?[.28,1]:[0,1],uirevision:`event-y-${e.id}-${state.historyScale}-${unit.label}`},
     yaxis2:{title:{text:'Digital'},gridcolor:'#1b2228',color:'#8d99a5',domain:[0,.18],tickmode:'array',tickvals:[]},
-    font:{color:'#c8d0d8',size:11},hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',showlegend:true,legend:{orientation:'h',x:0,xanchor:'left',y:1.02,yanchor:'bottom'},
+    font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:11},hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',showlegend:true,legend:{orientation:'h',x:0,xanchor:'left',y:1.02,yanchor:'bottom'},
     shapes:eventMarkers.length?eventMarkers.map(m=>({type:'line',x0:m.t_us,x1:m.t_us,y0:0,y1:1,yref:'paper',legendgroup:m.kind,opacity:.3,line:{color:stateMarkerColor(m),width:1,dash:m.kind.endsWith('validated')?'dot':'solid'}})):[{type:'line',x0:0,x1:0,y0:0,y1:1,yref:'paper',opacity:.3,line:{color:'#f5bd5b',width:1,dash:'dot'}}],
     uirevision:`event-${state.currentMeasurement?.id}-${e.id}-${state.historyScale}`
   };
@@ -1044,7 +1049,16 @@ $('historySmoothing').addEventListener('change',e=>{
 });
 $('backToOverview').addEventListener('click',()=>{cancelEventLoad();state.historyMode='overview';state.currentEvent=null;++state.historyRenderToken;showHistoryOverview()});
 $('backToMeasurements').addEventListener('click',()=>{++state.historyRenderToken;state.currentEvent=null;selectEventRow(null);setView('measurements');loadMeasurements()});
-$('exportBtn').addEventListener('click',()=> $('exportBtn').parentElement.classList.toggle('open'));document.addEventListener('click',e=>{if(!e.target.closest('.dropdown'))document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open'))});
+function closeExportMenu(){
+  document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open'));
+  $('exportBtn').ariaExpanded='false';
+}
+$('exportBtn').addEventListener('click',()=>{
+  const open=$('exportBtn').parentElement.classList.toggle('open');
+  $('exportBtn').ariaExpanded=String(open);
+});
+document.addEventListener('click',e=>{if(!e.target.closest('.dropdown')||e.target.closest('.dropdown-menu a'))closeExportMenu()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('exportBtn').ariaExpanded==='true'){closeExportMenu();$('exportBtn').focus()}});
 $('editMeasurement').addEventListener('click',()=>{const m=state.currentMeasurement;if(!m)return;const f=$('editForm');for(const k of ['name','project','device','firmware','notes'])f.elements[k].value=m[k]||'';$('editDialog').showModal()});document.querySelectorAll('[data-close-edit]').forEach(b=>b.addEventListener('click',()=>$('editDialog').close()));$('editForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),payload=Object.fromEntries(['name','project','device','firmware','notes'].map(k=>[k,f.get(k)]));try{await api(`/api/measurements/${state.currentMeasurement.id}`,{method:'PATCH',body:JSON.stringify(payload)});$('editDialog').close();toast('Metadaten gespeichert');await openMeasurement(state.currentMeasurement.id);await loadMeasurements()}catch(err){toast(err.message,true)}});$('deleteMeasurement').addEventListener('click',async()=>{const m=state.currentMeasurement;if(!m||!confirm(`Messung „${m.name}“ wirklich löschen?`))return;try{await api(`/api/measurements/${m.id}`,{method:'DELETE'});toast('Messung gelöscht');await loadMeasurements();setView('measurements')}catch(e){toast(e.message,true)}});
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.view;closeSessionWs();setView(v);if(v==='measurements')loadMeasurements();if(v==='battery')BatteryLifeUI.open()}));
 $('batteryFromMeasurement').addEventListener('click',()=>{const id=state.currentMeasurement?.id;setView('battery');BatteryLifeUI.open(id)});

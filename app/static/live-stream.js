@@ -71,7 +71,7 @@ async function renderLiveSpectrogram(series){
     colorbar:{title:{text:'Leistungsdichte [dB re 1 µA²/Hz]',side:'bottom'},orientation:'h',x:.5,xanchor:'center',y:-.3,yanchor:'top',len:.85,thickness:10,outlinewidth:0,tickfont:{color:'#87929d',size:10}},
     hovertemplate:'t=%{x:.3f} s<br>f=%{y:.1f} Hz<br>%{z:.1f} dB re 1 µA²/Hz<extra></extra>'
   }],{
-    paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:11},
+    paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:11},
     margin:{l:64,r:24,t:10,b:112},
     xaxis:{title:{text:series?.phase==='startup'?'Zeit seit Einschalten [s]':'Zeit seit Sleep Start [s]',standoff:12},range:[Math.max(0,latest-history),Math.max(.25,latest)],gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,automargin:true},
     yaxis:{title:{text:'Frequenz [Hz]',standoff:10},type:'log',gridcolor:'#222a31',color:'#aeb8c2',automargin:true},

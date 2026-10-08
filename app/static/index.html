@@ -3,35 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0e1115">
+  <meta name="theme-color" content="#10151c">
   <title>PowerLab</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-event-style">
-  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-battery-print">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-ui-polish">
+  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-ui-polish">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#mainContent">Zum Inhalt springen</a>
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div>
       <div><strong>PowerLab</strong><span id="appVersion"></span></div>
     </div>
-    <nav>
-      <button class="nav active" data-view="live">◉ <span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
-      <button class="nav" data-view="measurements">▤ <span>Messungen</span></button>
-      <button class="nav" data-view="battery">◒ <span>Batterielaufzeit</span></button>
+    <p class="nav-caption">Arbeitsbereich</p>
+    <nav aria-label="Hauptnavigation">
+      <button class="nav active" data-view="live" aria-current="page"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-6 4 12 3-6h4"/></svg><span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
+      <button class="nav" data-view="measurements"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Messungen</span></button>
+      <button class="nav" data-view="battery"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="18" height="12" rx="2"/><path d="M22 10v4M6 10v4M10 10v4M14 10v4"/></svg><span>Batterielaufzeit</span></button>
     </nav>
     <div class="sidebar-bottom">
-      <div class="status-line"><i class="ok"></i><span>SQLite + Parquet</span></div>
-      <a href="/docs" target="_blank">API-Dokumentation ↗</a>
+      <div class="status-line"><i class="ok" aria-hidden="true"></i><span>Lokaler Arbeitsbereich</span></div>
+      <a href="/docs" target="_blank" rel="noopener noreferrer">API-Dokumentation ↗</a>
     </div>
   </aside>
 
-  <main>
+  <main id="mainContent" tabindex="-1">
     <header class="topbar">
       <div><h1 id="pageTitle">Aktiv</h1><p id="pageSubtitle">Laufende und geplante PPK2-Messungen</p></div>
-      <div class="top-actions"><button class="primary" id="newMeasurementBtn">+ Neue Messung</button></div>
+      <div class="top-actions"><button class="primary" id="newMeasurementBtn"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Neue Messung</button></div>
     </header>
 
     <section id="liveView" class="view active">
@@ -41,7 +44,7 @@
         <div class="summary-card"><span>PPK2 erkannt</span><strong id="deviceCount">0</strong></div>
       </div>
       <div id="liveEmpty" class="hero-card">
-        <div><span class="eyebrow">BEREIT</span><h2>Keine aktive oder geplante Messung</h2><p>Lege eine Messung für sofort oder für einen späteren Zeitpunkt an. Dauer oder fester Endzeitpunkt können automatisch gesteuert werden.</p></div>
+        <div><span class="eyebrow">BEREIT FÜR DIE NÄCHSTE MESSUNG</span><h2>Dein nächster Test beginnt hier.</h2><p>Verbinde ein PPK2 und lege eine Messung an. Starte sofort oder plane Start und Ende für später.</p></div>
         <button class="primary large" id="idleStartBtn">Messung anlegen</button>
       </div>
       <div id="liveLists" class="live-lists hidden">
@@ -130,12 +133,12 @@
 
       <div id="sessionLiveArea" class="hidden">
         <div class="kpi-grid detail-kpis">
-          <div class="kpi"><span>Current</span><strong id="kpiCurrent">—</strong><small>letztes Sample</small></div>
-          <div class="kpi"><span>Sleep baseline</span><strong id="kpiSleep">—</strong><small id="kpiThreshold">Threshold —</small></div>
-          <div class="kpi"><span>Peak</span><strong id="kpiPeak">—</strong><small>seit Start</small></div>
-          <div class="kpi"><span>Wake events</span><strong id="kpiWake">0</strong><small id="kpiBackground"></small><small>automatisch erkannt</small></div>
-          <div class="kpi"><span>Charge</span><strong id="kpiCharge">—</strong><small>integriert</small></div>
-          <div class="kpi"><span>Energy</span><strong id="kpiEnergy">—</strong><small>bei Messspannung</small></div>
+          <div class="kpi"><span>Aktueller Strom</span><strong id="kpiCurrent">—</strong><small>letztes Sample</small></div>
+          <div class="kpi"><span>Sleep-Referenz</span><strong id="kpiSleep">—</strong><small id="kpiThreshold">Schwelle —</small></div>
+          <div class="kpi"><span>Spitzenstrom</span><strong id="kpiPeak">—</strong><small>seit Start</small></div>
+          <div class="kpi"><span>Wake-Ereignisse</span><strong id="kpiWake">0</strong><small id="kpiBackground"></small><small>automatisch erkannt</small></div>
+          <div class="kpi"><span>Ladung</span><strong id="kpiCharge">—</strong><small>integriert</small></div>
+          <div class="kpi"><span>Energie</span><strong id="kpiEnergy">—</strong><small>bei Messspannung</small></div>
         </div>
         <div class="card chart-card">
           <div class="card-title-row">
@@ -169,7 +172,7 @@
     </section>
 
     <section id="measurementsView" class="view">
-      <div class="toolbar card"><input id="historySearch" type="search" placeholder="Messungen durchsuchen …"><button class="secondary" id="refreshMeasurements">↻ Aktualisieren</button></div>
+      <div class="toolbar card"><input id="historySearch" type="search" placeholder="Name, Projekt oder Gerät suchen …" aria-label="Messungen durchsuchen"><button class="secondary" id="refreshMeasurements">↻ Aktualisieren</button></div>
       <div class="toolbar card measurement-bulk-toolbar">
         <span id="measurementSelectionCount" aria-live="polite">0 ausgewählt</span>
         <button class="secondary" id="clearMeasurementSelection" disabled>Auswahl aufheben</button>
@@ -179,13 +182,13 @@
         <button class="danger" id="deleteSelectedMeasurements" disabled>Auswahl löschen</button>
       </div>
       <div class="card table-card">
-        <table><thead><tr><th class="measurement-select-cell"><input id="selectAllMeasurements" type="checkbox" aria-label="Alle sichtbaren Messungen auswählen"></th><th>Datum</th><th>Name</th><th>Projekt / Device</th><th>Firmware</th><th>Dauer</th><th>Sleep</th><th>Events</th><th>Status</th></tr></thead><tbody id="measurementRows"></tbody></table>
+        <table><thead><tr><th class="measurement-select-cell"><input id="selectAllMeasurements" type="checkbox" aria-label="Alle sichtbaren Messungen auswählen"></th><th>Datum</th><th>Name</th><th>Projekt / Gerät</th><th>Firmware</th><th>Dauer</th><th>Sleep</th><th>Ereignisse</th><th>Status</th></tr></thead><tbody id="measurementRows"></tbody></table>
         <div id="emptyMeasurements" class="empty hidden">Noch keine abgeschlossenen Messungen vorhanden.</div>
       </div>
     </section>
 
     <section id="detailView" class="view">
-      <div class="detail-toolbar"><button class="secondary" id="backToMeasurements">← Messungen</button><div class="spacer"></div><button class="secondary" id="editMeasurement">✎ Bearbeiten</button><div class="dropdown"><button class="secondary" id="exportBtn">⇩ Export</button><div class="dropdown-menu"><a id="exportPdf">Messprotokoll (PDF)</a><a id="exportJson">JSON Metadaten</a><a id="exportCsv">CSV Übersicht</a><a id="exportBundle">PowerLab Bundle (.zip)</a></div></div><button class="danger ghost" id="deleteMeasurement">Löschen</button></div>
+      <div class="detail-toolbar"><button class="secondary" id="backToMeasurements">← Messungen</button><div class="spacer"></div><button class="secondary" id="editMeasurement">Bearbeiten</button><div class="dropdown"><button class="secondary" id="exportBtn" aria-expanded="false" aria-controls="exportMenu">Exportieren ↓</button><div class="dropdown-menu" id="exportMenu"><a id="exportPdf">Messprotokoll (PDF)</a><a id="exportJson">Metadaten (JSON)</a><a id="exportCsv">Übersicht (CSV)</a><a id="exportBundle">PowerLab-Bundle (.zip)</a></div></div><button class="danger ghost" id="deleteMeasurement">Löschen</button></div>
       <div class="detail-title card">
         <div class="detail-heading"><div><span class="status-badge" id="detailStatus">Abgeschlossen</span><h2 id="detailName">—</h2><p id="detailMeta">—</p></div><div class="detail-time"><span>Messdauer</span><strong id="detailDuration">—</strong><span id="detailStarted">—</span></div></div>
         <p id="detailError" class="event-load-error hidden" role="alert"></p>
@@ -198,7 +201,7 @@
         <section class="card metric-group detail-energy"><h3>Verbrauch</h3><dl><div><dt>Gesamtladung</dt><dd id="detailCharge">—</dd></div><div><dt>Gesamtenergie</dt><dd id="detailEnergy">—</dd></div></dl></section>
       </div>
       <div id="historyOverviewCard" class="card chart-card detail-protocol-card"><div class="card-title-row"><div><h3 id="historyOverviewTitle">Sleep / Wake-Verlauf</h3><p id="historyOverviewSubtitle">Exakte Zustandswechsel auf der Messzeitachse</p></div><div class="detail-state-legend"><span class="detail-sleep">Sleep</span><span class="detail-wake">Wake</span></div></div><div id="historyOverviewChart" class="chart large-chart" tabindex="0" aria-label="Sleep / Wake-Verlauf" aria-describedby="historyOverviewZoomHint"></div><p id="historyOverviewZoomHint" class="chart-zoom-hint">Chart anklicken, um mit dem Mausrad zu zoomen.</p></div>
-      <div id="wakeEventCard" class="card chart-card hidden"><div class="card-title-row"><div><h3 id="wakeEventTitle">Wake Event</h3><p id="wakeEventSubtitle">100-kS/s-Rohdaten</p></div><div class="event-chart-actions"><button class="secondary" id="backToOverview">← Zustandsübersicht</button><div class="segmented" id="historyScaleControls"><button class="active" data-history-scale="log">Log</button><button data-history-scale="linear">Linear</button></div><label class="smoothing-control" title="Maximale Zahl angezeigter Punkte. Beim Hineinzoomen werden feinere Daten bis zu allen Rohsamples nachgeladen."><span>Punkte / Ansicht</span><input id="eventPointBudget" type="number" min="100" max="50000" step="100" value="25000" aria-label="Maximale Punkte pro Ansicht" style="width:100px"></label><label class="smoothing-control" title="Adaptive Gl?ttung reduziert Rauschen und erh?lt starke Spr?nge. Nur die Darstellung wird ver?ndert."><span>Gl?ttung</span><select id="historySmoothing" aria-label="Gl?ttung des Stromverlaufs"><option value="off">Aus</option><option value="light">Leicht</option><option value="medium">Mittel</option><option value="strong">Stark</option></select></label></div></div><div id="wakeEventStatus" class="event-loading hidden" role="status"></div><div id="wakeEventChart" class="chart large-chart"></div></div>
+      <div id="wakeEventCard" class="card chart-card hidden"><div class="card-title-row"><div><h3 id="wakeEventTitle">Wake-Ereignis</h3><p id="wakeEventSubtitle">100-kS/s-Rohdaten</p></div><div class="event-chart-actions"><button class="secondary" id="backToOverview">← Zustandsübersicht</button><div class="segmented" id="historyScaleControls"><button class="active" data-history-scale="log">Log</button><button data-history-scale="linear">Linear</button></div><label class="smoothing-control" title="Maximale Zahl angezeigter Punkte. Beim Hineinzoomen werden feinere Daten bis zu allen Rohsamples nachgeladen."><span>Punkte / Ansicht</span><input id="eventPointBudget" type="number" min="100" max="50000" step="100" value="25000" aria-label="Maximale Punkte pro Ansicht"></label><label class="smoothing-control" title="Adaptive Glättung reduziert Rauschen und erhält starke Sprünge. Nur die Darstellung wird verändert."><span>Glättung</span><select id="historySmoothing" aria-label="Glättung des Stromverlaufs"><option value="off">Aus</option><option value="light">Leicht</option><option value="medium">Mittel</option><option value="strong">Stark</option></select></label></div></div><div id="wakeEventStatus" class="event-loading hidden" role="status"></div><div id="wakeEventChart" class="chart large-chart"></div></div>
       <details id="eventProtocol" class="card table-card event-protocol"><summary>Ereignisprotokoll <span class="event-count" id="wakeEventCount">0</span></summary><p class="event-protocol-note">Sleep- und Wake-Phasen auf der Messzeitachse. Wake- oder Hintergrundereignis auswählen, um Rohdaten zu öffnen. Startzeiten seit Protokollbeginn; Kennwerte gültiger Zyklen enthalten gekennzeichnete Ergänzungen kleiner Datenlücken.</p><div class="event-scroll"><table><thead><tr><th scope="col">Phase / Ereignis</th><th scope="col">Startzeit</th><th scope="col">Wake-Periode</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Spitzenstrom</th><th scope="col">Ladung</th><th scope="col">Energie</th><th scope="col">D0–D7</th><th scope="col">Daten</th></tr></thead><tbody id="eventRows"></tbody></table></div></details>
       <section class="card table-card sleep-analysis-card detail-sleep" aria-labelledby="detailSleepTitle">
         <div class="card-title-row"><div><h3 id="detailSleepTitle" class="detail-sleep">Sleep-Auswertung</h3><p id="detailSleepNote"></p></div><button class="secondary" id="batteryFromMeasurement">Batterielaufzeit berechnen</button></div>
@@ -218,10 +221,10 @@
 
 <dialog id="measurementDialog" aria-labelledby="measurementDialogTitle">
   <form id="measurementForm" method="dialog">
-    <div class="dialog-head"><div><span class="eyebrow" id="measurementDialogEyebrow">NEW SESSION</span><h2 id="measurementDialogTitle">Messung anlegen</h2></div><button type="button" class="icon-btn" data-close-dialog aria-label="Dialog schließen">×</button></div>
+    <div class="dialog-head"><div><span class="eyebrow" id="measurementDialogEyebrow">NEUE MESSUNG</span><h2 id="measurementDialogTitle">Messung anlegen</h2></div><button type="button" class="icon-btn" data-close-dialog aria-label="Dialog schließen">×</button></div>
     <fieldset class="measurement-basics"><legend><span class="section-number" aria-hidden="true">1</span> Messung &amp; Gerät</legend><div class="form-grid">
       <label class="wide">Name<input name="name" id="measurementName" maxlength="160" required value="ULP Sleep / Wake Test"></label>
-      <label>Projekt<input name="project" value="ULP Application"></label><label>Device<input name="device" value="Prototype #1"></label>
+      <label>Projekt<input name="project" value="ULP Application"></label><label>Gerät<input name="device" value="Prototype #1"></label>
       <label>Firmware<input name="firmware" value="dev"></label>
     </div><div class="form-grid hardware-settings">
       <label>PPK2 auswählen<select name="port" id="portSelect" required></select></label>
@@ -359,14 +362,14 @@
   </form>
 </dialog>
 
-<dialog id="editDialog"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATA</span><h2>Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit>×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Device<input name="device"></label><label>Firmware<input name="firmware"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
-<div id="toast" class="toast"></div>
+<dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATEN</span><h2 id="editDialogTitle">Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit aria-label="Dialog schließen">×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Gerät<input name="device"></label><label>Firmware<input name="firmware"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="currentChartTooltip" class="current-chart-tooltip hidden" role="tooltip"></div>
 <script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>
 <script src="/static/time-inputs.js?v=1.0.6-time-units"></script>
 <script src="/static/wake-analysis.js?v=1.0.6-detail-cleanup"></script>
-<script src="/static/live-stream.js?v=1.0.6-live-wake-phases"></script>
-<script src="/static/measurement-preview.js?v=1.0.6-preview-ui"></script>
-<script src="/static/battery-life.js?v=1.0.6-battery-print"></script>
-<script src="/static/app.js?v=1.0.6-event-style"></script>
+<script src="/static/live-stream.js?v=1.0.6-ui-polish"></script>
+<script src="/static/measurement-preview.js?v=1.0.6-ui-polish"></script>
+<script src="/static/battery-life.js?v=1.0.6-ui-polish"></script>
+<script src="/static/app.js?v=1.0.6-ui-polish"></script>
 </body></html>

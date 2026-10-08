@@ -287,7 +287,7 @@ const BatteryLifeUI=(()=>{
       const min=hasCurve?point.minH:point.expectedH,max=hasCurve?point.maxH:point.expectedH,padding=hasCurve?0:Math.max(max*.01,1e-9);
       if(!hasCurve)annotations.push({xref:'paper',yref:'paper',x:.5,y:.85,text:distribution.reason,showarrow:false,font:{color:'#aeb8c2',size:11}});
       const compact=el('Chart').clientWidth>0&&el('Chart').clientWidth<500;
-      const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#c8d0d8',size:12},margin:{l:compact?66:82,r:24,t:compact?160:70,b:86},
+      const layout={paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{family:'Segoe UI, Inter, system-ui, sans-serif',color:'#c8d0d8',size:12},margin:{l:compact?66:82,r:24,t:compact?160:70,b:86},
         xaxis:{title:{text:`Batterielaufzeit [${display.label}]`,standoff:16},range:Number.isFinite(max)?[Math.max(0,min-padding)/display.factor,(max+padding)/display.factor]:undefined,type:'linear',gridcolor:'#252d35',zeroline:false},
         yaxis:{title:{text:hasCurve?`Unsicherheitsdichte [% / ${display.label}]`:'Laufzeitmarkierung',standoff:16},gridcolor:'#252d35',rangemode:'tozero',zeroline:false},
         annotations,legend:{orientation:'h',x:0,y:1.03,yanchor:'bottom',font:{size:10}},shapes,hovermode:'x unified'};
