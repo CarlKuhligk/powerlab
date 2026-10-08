@@ -32,14 +32,20 @@ input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator{opacity
 #measurementRows tr.selected{background:#213027;box-shadow:inset 3px 0 var(--accent)}
 button:disabled{opacity:.45;cursor:default}
 /* v1.0.6 — stable wake-event detail panel and readable event list */
-.wake-event-table-card{margin-top:14px;overflow:hidden}
+:is(.wake-event-table-card,.event-protocol){margin-top:14px;overflow:hidden}
 .wake-event-table-card .card-title-row{margin:0;padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.event-protocol{padding-top:0}
+.event-protocol summary{padding:16px 18px;font-size:15px;font-weight:600}
+.event-protocol[open] summary{border-bottom:1px solid var(--line)}
+.event-protocol .event-protocol-note{padding:12px 18px;line-height:1.6}
+.event-protocol summary:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.event-protocol tbody tr:not([data-event]):hover{cursor:default}
 .event-count{display:inline-flex;min-width:24px;justify-content:center;padding:2px 7px;margin-left:6px;border-radius:999px;background:#27362c;color:#8ee7aa;font-size:10px;vertical-align:middle}
-.wake-event-table-card .event-scroll{max-height:420px;overflow:auto}
-.wake-event-table-card thead th{position:sticky;top:0;z-index:3;background:#11161b;box-shadow:0 1px 0 var(--line);white-space:nowrap}
-.wake-event-table-card td{white-space:nowrap}
-.wake-event-table-card tbody tr.selected{background:#213027;box-shadow:inset 3px 0 var(--accent)}
-.wake-event-table-card tbody tr.selected td{color:#eefaf2}
+:is(.wake-event-table-card,.event-protocol) .event-scroll{max-height:420px;overflow:auto}
+:is(.wake-event-table-card,.event-protocol) thead th{position:sticky;top:0;z-index:3;background:#11161b;box-shadow:0 1px 0 var(--line);white-space:nowrap}
+:is(.wake-event-table-card,.event-protocol) td{white-space:nowrap}
+:is(.wake-event-table-card,.event-protocol) tbody tr.selected{background:#213027;box-shadow:inset 3px 0 var(--accent)}
+:is(.wake-event-table-card,.event-protocol) tbody tr.selected td{color:#eefaf2}
 .history-metadata-card{margin-top:14px}
 #wakeEventCard{margin-top:0;border-color:#334238}
 #wakeEventCard .card-title-row{margin-bottom:10px}
@@ -63,10 +69,9 @@ button:disabled{opacity:.45;cursor:default}
 .threshold-legend span{display:inline-flex;align-items:center;gap:7px;cursor:help}
 .legend-dot{display:inline-block;width:9px;height:9px;flex-shrink:0;border:2px solid currentColor;border-radius:50%;background:currentColor}
 .legend-dot.wake{color:#f5bd5b}.legend-dot.sleep{color:#60a5fa}.legend-dot.open{background:transparent}
-.cycle-energy-card{margin-bottom:16px;padding:18px}
-.cycle-energy-card .kpi-grid{margin:14px 0}
-.cycle-energy-card table td,.cycle-energy-card table th{white-space:nowrap}
-.cycle-custom{display:flex;gap:8px;max-width:240px}.cycle-custom input{width:90px;min-width:0}.cycle-custom select{min-width:110px}
+.wake-analysis-card{margin-bottom:16px;padding:18px}
+.wake-analysis-card .kpi-grid{margin:14px 0}
+.wake-analysis-card table td,.wake-analysis-card table th{white-space:nowrap}
 .spectrogram-card{margin-top:14px;min-width:0}
 .spectrogram-card .card-title-row{align-items:center;margin-bottom:0}
 .spectrogram-card .card-title-row>div{min-width:0}
@@ -191,11 +196,11 @@ button:disabled{opacity:.45;cursor:default}
 #detailView .event-display-help .info-button{width:21px;height:21px;cursor:pointer;color:#acbdd0;border-color:#475768}
 #detailView .event-display-help .field-tooltip{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:300px;max-width:calc(100vw - 48px);font-size:12px;line-height:1.6}
 #detailView .event-count{background:#aebdcd12;color:var(--detail-neutral);border:1px solid #aebdcd30;font-weight:500;text-transform:none}
-#detailView .wake-event-table-card{border-top:2px solid var(--detail-neutral)}
+#detailView .event-protocol{border-top:2px solid var(--detail-neutral)}
 #detailView .event-open{padding:4px 8px;background:#ffffff05;border:1px solid #ffffff18;color:var(--detail-accent);font-size:11px;white-space:nowrap}
 #detailView .event-open:focus-visible{outline:2px solid var(--detail-accent);outline-offset:3px}
-#detailView .wake-event-table-card tbody tr.selected{background:#aebdcd0d;box-shadow:inset 3px 0 var(--detail-neutral)}
-#detailView .wake-event-table-card tbody tr.selected td{color:var(--text)}
+#detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected{background:#aebdcd0d;box-shadow:inset 3px 0 var(--detail-neutral)}
+#detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected td{color:var(--text)}
 #detailView .sleep-analysis-card{margin-top:14px;border-top:2px solid var(--detail-sleep)}
 #detailView .sleep-analysis-card>.card-title-row{margin:0;padding:16px 18px;border-bottom:1px solid var(--line)}
 #detailView .sleep-analysis-card h3,#detailView .sleep-analysis-card h4{color:var(--detail-sleep)}
@@ -205,29 +210,21 @@ button:disabled{opacity:.45;cursor:default}
 #detailView .sleep-analysis-kpis .kpi{background:#ffffff02;border-radius:8px;padding:14px;min-width:0}
 #detailView .sleep-analysis-kpis .kpi span{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.5}
 #detailView .sleep-analysis-kpis .kpi strong{font-size:21px;line-height:1.3;color:var(--detail-sleep);white-space:normal;overflow:visible;overflow-wrap:anywhere}
-#detailView .sleep-phase-heading{padding:0 18px 14px}
-#detailView .sleep-phase-heading h4{margin-bottom:6px}
-#detailView .sleep-phase-heading .form-hint{margin:0;font-size:12px;line-height:1.6;color:#a1acb7}
-#detailView .sleep-analysis-card .event-count{background:#60a5fa12;color:var(--detail-sleep);border-color:#60a5fa30}
-#detailView .sleep-analysis-card .event-scroll{max-height:420px;border-top:1px solid var(--line)}
-#detailView .sleep-analysis-card thead th{position:sticky;top:0;z-index:3;background:#11161b;white-space:nowrap;box-shadow:0 1px 0 var(--line)}
-#detailView .sleep-analysis-card td{white-space:nowrap}
-#detailView .sleep-analysis-card tbody tr:hover{cursor:default}
 @media(max-width:780px){#detailView .sleep-analysis-card>.card-title-row{flex-wrap:wrap}#detailView .sleep-analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:480px){#detailView .sleep-analysis-card>.card-title-row{padding:14px}#detailView .sleep-analysis-card .card-title-row button{width:100%}#detailView .sleep-analysis-kpis{gap:10px;padding:14px}#detailView .sleep-analysis-kpis .kpi{padding:12px}#detailView .sleep-analysis-kpis .kpi strong{font-size:18px}#detailView .sleep-phase-heading{padding:0 14px 14px}}
-#detailView .cycle-energy-card{margin-top:14px;border-top:2px solid var(--detail-energy)}
-#detailView .cycle-energy-card h3{color:var(--detail-energy);font-size:15px}
-#detailCycleCount{font-size:11px;color:#bdacd8;white-space:nowrap}
-#detailView .cycle-energy-card .form-hint{font-size:12px;line-height:1.65;color:#a1acb7;margin-top:8px}
-#detailView .cycle-energy-card .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
-#detailView .cycle-energy-card .kpi span{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.5;min-height:33px}
-#detailView .cycle-energy-card .kpi strong{font-size:20px;overflow:visible;overflow-wrap:anywhere}
+@media(max-width:480px){#detailView .sleep-analysis-card>.card-title-row{padding:14px}#detailView .sleep-analysis-card .card-title-row button{width:100%}#detailView .sleep-analysis-kpis{gap:10px;padding:14px}#detailView .sleep-analysis-kpis .kpi{padding:12px}#detailView .sleep-analysis-kpis .kpi strong{font-size:18px}}
+#detailView .wake-analysis-card{margin-top:14px;border-top:2px solid var(--detail-wake)}
+#detailView .wake-analysis-card h3{color:var(--detail-wake);font-size:15px}
+#detailWakeAnalysisCount{font-size:11px;color:var(--detail-wake);white-space:nowrap}
+#detailView .wake-analysis-card .form-hint{font-size:12px;line-height:1.65;color:#a1acb7;margin-top:8px}
+#detailView .wake-analysis-card .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+#detailView .wake-analysis-card .kpi span{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.5;min-height:33px}
+#detailView .wake-analysis-card .kpi strong{font-size:20px;overflow:visible;overflow-wrap:anywhere}
 .detail-context-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
 .detail-context-grid section{min-width:0}
 #detailView .detail-context-grid dl{display:grid;grid-template-columns:1fr;gap:0;margin:0}
 .detail-context-grid dl>div{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(0,1.2fr);gap:12px;padding:9px 0;border-bottom:1px solid #ffffff08;font-size:12px;line-height:1.5}
 @media(max-width:1150px){.detection-metadata,.detail-metric-groups{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-context-grid{grid-template-columns:1fr 1fr}.detail-context-grid section:last-child{grid-column:1/-1}}
-@media(max-width:780px){#detailView .detail-toolbar{flex-wrap:wrap}#detailView .detail-toolbar .spacer{display:none}.detail-heading{flex-direction:column;gap:16px}#detailView .detail-time{text-align:left}.detail-context-grid{grid-template-columns:1fr}.detail-context-grid section:last-child{grid-column:auto}#detailView .cycle-energy-card .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#detailView .cycle-energy-card .card-title-row{flex-wrap:wrap}}
+@media(max-width:780px){#detailView .detail-toolbar{flex-wrap:wrap}#detailView .detail-toolbar .spacer{display:none}.detail-heading{flex-direction:column;gap:16px}#detailView .detail-time{text-align:left}.detail-context-grid{grid-template-columns:1fr}.detail-context-grid section:last-child{grid-column:auto}#detailView .wake-analysis-card .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#detailView .wake-analysis-card .card-title-row{flex-wrap:wrap}}
 @media(max-width:480px){#detailView .detail-title{padding:16px}.detection-metadata{gap:16px 10px}.detail-metric-groups{gap:10px}.metric-group{padding:14px 12px}#detailView .metric-group dd{font-size:18px}#historyOverviewCard .card-title-row{flex-wrap:wrap}.detail-state-legend{padding-bottom:4px}}
 
 /* Keep each threshold beside its validation time, and recording before the example. */
@@ -284,3 +281,8 @@ button:disabled{opacity:.45;cursor:default}
 .preview-chart{width:100%;height:300px;min-width:0}
 .preview-score{height:220px}
 @media(max-width:600px){.preview-chart{height:270px}.preview-score{height:220px}.preview-session-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.preview-session-actions>button:first-child{grid-column:1/-1}.preview-panel{padding:10px 6px}.preview-panel-head{padding-inline:4px}.preview-panel-head>.preview-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.preview-toolbar .preview-tool{grid-column:1/-1}.preview-toolbar label{min-width:0}.preview-legend{padding-inline:4px;gap:8px 12px}.preview-panel-note{margin-inline:4px!important}}
+
+#historyOverviewChart:focus{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+#historyOverviewCard .chart-zoom-hint{margin-top:8px;font-size:11px}
+.wake-analysis-card tbody tr:hover{cursor:default}
+@media(max-width:780px){.shell{grid-template-columns:minmax(0,1fr)}.sidebar{flex-wrap:wrap;gap:10px}.sidebar nav{flex-wrap:wrap}.topbar{flex-wrap:wrap}}

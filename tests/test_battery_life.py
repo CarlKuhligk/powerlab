@@ -77,8 +77,9 @@ def test_expected_runtime_conserves_energy_and_percentiles_use_paired_cycles():
     expected_power = (500*3.3 + (16*3.3/3)*10) / 10.3
     assert value['power_uw'] == pytest.approx(expected_power)
     assert value['expected_h'] == pytest.approx(1e6/expected_power)
-    scenarios = [1e6/((200*3.3 + 4*3.3*10)/10.2),
-                 1e6/((800*3.3 + 6*3.3*10)/10.4)]
+    sleep_power = 16 * 3.3 / 3
+    scenarios = [1e6/((200*3.3 + sleep_power*10)/10.2),
+                 1e6/((800*3.3 + sleep_power*10)/10.4)]
     assert value['percentiles']['0'] == pytest.approx(min(scenarios))
     assert value['percentiles']['100'] == pytest.approx(max(scenarios))
     assert value['percentiles']['50'] == pytest.approx(sum(scenarios)/2)
@@ -89,7 +90,8 @@ def test_expected_runtime_conserves_energy_and_percentiles_use_paired_cycles():
     assert evaluate(data, 1, 'sleep', 100)['expected_h'] > value['expected_h']
     stats = measured_statistics(summary())
     assert stats['sleep_energy']['variance'] == pytest.approx((8*3.3/3600)**2/2)
-    assert stats['sleep_power']['variance'] == pytest.approx((2*3.3)**2/2)
+    assert stats['sleep_power']['mean'] == pytest.approx(sleep_power)
+    assert stats['sleep_power']['variance'] is None  # One device, no between-device estimate.
     assert stats['wake_energy']['variance'] == pytest.approx((600*3.3/3600)**2/2)
 
 
@@ -110,6 +112,37 @@ def test_no_cycles_rejected_and_single_cycle_does_not_invent_variance():
     assert measured_statistics(single)['wake_energy']['variance'] is None
     assert normal_approximation(profile(single), 1, 'sleep', 86400)['stddev_h'] is None
     assert evaluate(profile(single), 1, 'sleep', 10)['percentiles']['0'] == evaluate(profile(single), 1, 'sleep', 10)['percentiles']['100']
+
+
+@pytest.mark.parametrize('mode,value,power', [('period', 10, 731.5), ('duty', 10, 375.75)])
+def test_timing_preserves_device_specific_sleep_and_wake_relationship(mode, value, power):
+    sources = []
+    for name, duration, sleep_power in [('a', 1, 10), ('b', 3, 20)]:
+        sources.append({'id': name, 'summary': {'voltage_v': 3.3,
+            'valid_wake_phases': [{'sequence': i, 'duration_s': duration, 'energy_uwh': duration} for i in range(2)],
+            'valid_sleep_phases': [{'following_wake_sequence': i, 'duration_s': 10-duration,
+                                   'energy_uwh': sleep_power*(10-duration)/3600} for i in range(2)]}})
+    d = combine(sources)
+    point = evaluate(d, 1, mode, value)
+    assert point['power_uw'] == pytest.approx(power)
+    assert point['expected_h'] == pytest.approx(1e6 / power)
+    if mode == 'period':
+        assert point['sleep_s'] == 8
+        assert point['scenarios_h'] == pytest.approx([1e6*10/3690]*2 + [1e6*10/10940]*2)
+        with pytest.raises(ValueError, match='Periodendauer'):
+            evaluate(d, 1, 'period', 2)
+
+
+def test_sleep_current_is_calculated_at_each_devices_voltage():
+    sources = weighted_sources()
+    sources[0]['summary']['voltage_v'] = 2
+    sources[1]['summary']['voltage_v'] = 4
+    stats = combine(sources)['statistics']
+    # Device powers: 60 and 36 µW. Currents: 30 and 9 µA.
+    assert stats['sleep_current']['mean'] == pytest.approx(19.5)
+    assert stats['sleep_current']['min'] == 9
+    assert stats['sleep_current']['max'] == pytest.approx(30)
+    assert stats['sleep_current']['variance'] == pytest.approx(220.5)
 
 
 def test_normal_model_centers_expected_runtime_and_uses_weighted_measured_scatter():
@@ -133,7 +166,9 @@ def test_battery_pdf_contains_recomputed_statistics_and_percentile_table(tmp_pat
         measurement = {'id':'battery-test', 'name':'Test #panic("never source")', 'cycle_energy':summary()}
         monkeypatch.setattr(client.app.state.manager, 'get_measurement', lambda mid: measurement)
         data = report_data(measurement, summary(), BatteryReportRequest(**body))
-        assert len(data['statistics']) == 3 and len(data['percentiles']) == 5
+        assert len(data['statistics']) == 4 and len(data['percentiles']) == 5
+        assert any('Sleep-Strom' in row[0] for row in data['statistics'])
+        assert not any('Sleep-Energie' in row[0] for row in data['statistics'])
         assert data['percentiles'][2][:2] == ['P50 · Näherung', '50 %']
         assert data['results'][0][0] == 'Laufzeitschätzung aus mittlerer Leistung'
         response = client.post('/api/measurements/battery-test/battery-report', json=body)

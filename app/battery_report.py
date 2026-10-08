@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .battery_life import combine, evaluate, measured_statistics, uncertainty, profile
+from .battery_life import combine, device_distribution, evaluate, measured_statistics, uncertainty, profile
 from .report import number
 
 TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
@@ -18,6 +18,7 @@ def report_data(measurement, summary, request, combined=None, generated_at=None)
     data = combined if combined is not None else profile(summary)
     point = evaluate(data, request.energy_wh, request.mode, request.value)
     estimate = uncertainty(data, request.energy_wh, request.mode, request.value)
+    devices = device_distribution(data, request.energy_wh, request.mode, request.value)
     statistics = data['statistics'] if combined is not None else measured_statistics(summary)
     generated_at = (generated_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
     def lifetime_unit(hours):
@@ -44,14 +45,17 @@ def report_data(measurement, summary, request, combined=None, generated_at=None)
         'weighting': {'mean': 'Gleiche Anteile je Messung', 'cycle_count': 'Nach Anzahl gültiger Zyklen',
                       'custom': 'Eigene Gewichte je Messung'}.get(data.get('weighting'), 'Eine Messung'),
         'sources': [[s['name'], s['id'], str(s['count']), number(s['weight'], digits=6),
-                     number(s['share'] * 100, '%', 3), number(s['voltage_v'], 'V')]
+                     number(s['share'] * 100, '%', 3), number(s['voltage_v'], 'V'),
+                     number(s['sleep_current_ua'], 'µA', 3)]
                     for s in data.get('sources', [])],
         'setup': [['Nutzbare Batterieenergie', number(request.energy_wh * 1e6, 'µWh')],
                   ['Messspannung', number(summary['voltage_v'], 'V')],
                   ['Gültige gemessene Zyklen', str(data['count'])],
                   ['Davon mit ergänzten Datenlücken', str(summary.get('interpolated_cycle_count', 0))],
-                  ['Einstellung über', 'Sleep-Dauer' if request.mode == 'sleep' else 'Wake-Duty-Cycle'],
-                  ['Gewählte Sleep-Dauer', number(point['sleep_s'], 's')],
+                  ['Einstellung über', {'sleep': 'Sleep-Dauer', 'duty': 'Wake-Duty-Cycle',
+                                        'period': 'Periodendauer · Wake-Beginn zu Wake-Beginn'}[request.mode]],
+                  ['Periodendauer' if request.mode == 'period' else 'Mittlere Sleep-Dauer im Modell',
+                   number(request.value if request.mode == 'period' else point['sleep_s'], 's')],
                   ['Gemessene mittlere Wake-Dauer', number(data['wake_s'], 's')],
                   ['Wake-Duty-Cycle', (f'{duty:.3g}'.replace('.', ',') + ' %')
                    if 0 < duty < .001 else number(duty, '%')]],
@@ -61,10 +65,20 @@ def report_data(measurement, summary, request, combined=None, generated_at=None)
                     ['Untere 90-%-Grenze · P5 (Näherung)', lifetime(estimate['percentiles_h']['5']) if estimate['available'] else 'Nicht schätzbar'],
                     ['Obere 90-%-Grenze · P95 (Näherung)', lifetime(estimate['percentiles_h']['95']) if estimate['available'] else 'Nicht schätzbar']],
         'statistics': [[label] + [number(statistics[key].get(field), unit + ('²' if field == 'variance' else ''), 3)
-                                   for field in ['mean', 'min', 'max', 'stddev', 'variance']]
-                       for label, key, unit in [('Wake-Energie', 'wake_energy', 'µWh'),
-                                                 ('Sleep-Energie · gemessen', 'sleep_energy', 'µWh'),
-                                                 ('Sleep-Leistung · normiert', 'sleep_power', 'µW')]],
+                                   for field in ['mean', 'min', 'max', 'stddev', 'variance']] +
+                       [number(100 * statistics[key]['stddev'] / abs(statistics[key]['mean']), '%', 3)
+                        if statistics[key]['stddev'] is not None and statistics[key]['mean'] else '—']
+                       for label, key, unit in [('Wake-Dauer · Zyklen', 'wake_duration', 's'),
+                                                 ('Wake-Energie · Zyklen', 'wake_energy', 'µWh'),
+                                                 ('Sleep-Strom · Gerätemittel', 'sleep_current', 'µA'),
+                                                 ('Sleep-Leistung · Gerätemittel', 'sleep_power', 'µW')]],
+        'device_results': [
+            ['Geräte mit positivem Einfluss', str(devices['count'])],
+            ['Standardabweichung der Gerätelebensdauern', lifetime(devices['stddev_h']) if devices['available'] else 'Nicht schätzbar'],
+            ['Beobachtete Geräte · P5 bis P95',
+             lifetime(devices['percentiles_h']['5']) + ' bis ' + lifetime(devices['percentiles_h']['95'])
+             if devices['available'] else 'Nicht schätzbar']],
+        'device_note': devices['reason'] or 'Streuung der aus den Gerätemittelwerten berechneten Laufzeiten; beobachtete gewichtete Perzentile, kein Prognoseintervall.',
         'percentiles': [[f'P{p} · Näherung', f'{p} %', lifetime(estimate['percentiles_h'][str(p)]) if estimate['available'] else 'Nicht schätzbar']
                         for p in [5, 10, 50, 90, 95]],
     }

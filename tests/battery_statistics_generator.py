@@ -79,15 +79,20 @@ def reference(sources, weighting, energy, mode, value):
     wake_s = np.concatenate([m[:, 0] for _, m, _ in active])
     sleep_s = np.concatenate([m[:, 1] for _, m, _ in active])
     wake_energy = np.concatenate([m[:, 0]*m[:, 2]*(s['voltage_mv']/1000)/3600 for s, m, _ in active])
-    sleep_power = np.concatenate([m[:, 3]*(s['voltage_mv']/1000) for s, m, _ in active])
+    recorded_sleep_power = np.concatenate([m[:, 3]*(s['voltage_mv']/1000) for s, m, _ in active])
+    device_currents = np.array([np.average(m[:, 3], weights=m[:, 1]) for _, m, _ in active])
+    device_powers = np.array([p * s['voltage_mv']/1000 for p, (s, _, _) in zip(device_currents, active)])
+    device_shares = np.array([share for _, _, share in active])
+    sleep_power = np.concatenate([np.full(len(m), p) for p, (_, m, _) in zip(device_powers, active)])
     mean_wake = float(np.average(wake_s, weights=weights))
     mean_energy = float(np.average(wake_energy, weights=weights))
-    mean_sleep_power = sum(share*np.average(m[:, 3]*(s['voltage_mv']/1000), weights=m[:, 1])
-                           for s, m, share in active)
-    planned = value if mode == 'sleep' else mean_wake*(100/value-1)
-    power = (mean_energy*3600+mean_sleep_power*planned)/(mean_wake+planned)
+    mean_sleep_power = np.average(device_powers, weights=device_shares)
+    planned = value if mode == 'sleep' else value-mean_wake if mode == 'period' else mean_wake*(100/value-1)
+    device_durations = np.array([m[:, 0].mean() for _, m, _ in active])
+    device_sleep = np.full(len(active), value) if mode == 'sleep' else value-device_durations if mode == 'period' else device_durations*(100/value-1)
+    power = (mean_energy*3600+np.average(device_powers*device_sleep, weights=device_shares))/(mean_wake+planned)
     expected = energy*1e6/power
-    scenario_sleep = value if mode == 'sleep' else wake_s*(100/value-1)
+    scenario_sleep = value if mode == 'sleep' else value-wake_s if mode == 'period' else wake_s*(100/value-1)
     scenarios = energy*1e6*(wake_s+scenario_sleep)/(wake_energy*3600+sleep_power*scenario_sleep)
     order = np.argsort(scenarios, kind='stable')
     positions = np.cumsum(weights[order])-weights[order]/2
@@ -107,8 +112,10 @@ def reference(sources, weighting, energy, mode, value):
     return dict(shares=shares.tolist(), count=len(wake_s), wake_s=mean_wake,
                 wake_energy_uwh=mean_energy, sleep_power_uw=float(mean_sleep_power),
                 statistics=dict(wake_energy=statistics(wake_energy, weights),
-                                sleep_energy=statistics(sleep_power*sleep_s/3600, weights),
-                                sleep_power=statistics(sleep_power, weights)),
+                                wake_duration=statistics(wake_s, weights),
+                                sleep_energy=statistics(recorded_sleep_power*sleep_s/3600, weights),
+                                sleep_power=statistics(device_powers, device_shares),
+                                sleep_current=statistics(device_currents, device_shares)),
                 expected_h=float(expected), power_uw=float(power), sleep_s=float(planned),
                 duty_pct=float(100*mean_wake/(mean_wake+planned)),
                 scenarios_h=scenarios.tolist(), percentiles=empirical,
@@ -125,7 +132,7 @@ def generate(seed=20261007):
         for weighting in ['mean', 'cycle_count', 'custom']:
             for energy, mode, value in [(1, 'sleep', 0), (1, 'sleep', 60),
                                         (1, 'sleep', 86400), (2, 'sleep', 86400),
-                                        (1, 'duty', 1), (1, 'duty', 100)]:
+                                        (1, 'period', 60), (1, 'duty', 1), (1, 'duty', 100)]:
                 cases.append(dict(name=f'{kind}-{weighting}-{energy}-{mode}-{value}',
                                   sources=sources, weighting=weighting, energy_wh=energy,
                                   mode=mode, value=value,

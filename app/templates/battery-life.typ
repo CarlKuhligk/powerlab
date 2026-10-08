@@ -53,39 +53,45 @@
 Gewichtung: #report.weighting. Nur Messungen mit positivem Einfluss tragen zum Ergebnis bei.
 #if report.sources.len() > 0 {
   set text(size: 7.5pt)
-  rows-table(report.sources, headers: ("Messung", "ID", "Zyklen", "Gewicht", "Einfluss", "Spannung"),
-    columns: (1.5fr, 1.6fr, 0.65fr, 0.7fr, 0.7fr, 0.8fr))
+  rows-table(report.sources, headers: ("Messung", "ID", "Zyklen", "Gewicht", "Einfluss", "Spannung", "Sleep Ø"),
+    columns: (1.4fr, 1.4fr, 0.6fr, 0.65fr, 0.75fr, 0.7fr, 0.9fr))
 } else [
   *Messung:* #report.name · #report.id
 ]
-= Messstatistik der gültigen Zyklen
+= Wake-Zyklen und Sleep-Gerätemittelwerte
 #block[
-  #set text(size: 7.5pt)
+  #set text(size: 7pt)
   #rows-table(report.statistics,
-    headers: ("Kennwert", "Mittelwert", "Minimum", "Maximum", "Standardabw.", "Varianz"),
-    columns: (1.45fr, 1fr, 1fr, 1fr, 1fr, 1fr))
+    headers: ("Kennwert", "Mittelwert", "Minimum", "Maximum", "Standardabw.", "Varianz", "Relativ"),
+    columns: (1.65fr, 1fr, 0.85fr, 0.85fr, 0.9fr, 1fr, 0.75fr))
 ]
-Standardabweichung und Varianz beschreiben die Streuung der Einzelzyklen.
-Die Standardunsicherheit der mittleren Laufzeitschätzung beträgt
-*#report.results.at(2).at(1)*. Sie beschreibt die Unsicherheit des geschätzten Mittelwerts.
+Sleep-Strom je Gerät = gesamte Sleep-Ladung / gesamte gültige Sleep-Dauer,
+einschließlich periodischer Peaks. Sleep-Minimum, -Maximum und -Streuung vergleichen
+diese Gerätemittelwerte. Wake-Werte beschreiben Einzelzyklen. Relative Streuung = Standardabweichung / Betrag des Mittelwerts.
+= Laufzeitstreuung zwischen Geräten
+#rows-table(report.device_results)
+#text(size: 8pt, fill: muted)[#report.device_note]
 = Rechenmodell
-Die mittlere Leistung ergibt sich aus der Wake-Energie und der auf die gewählte
-Sleep-Dauer skalierten Sleep-Energie, geteilt durch die gesamte Zyklusdauer.
-Die Sleep-Leistung wird als gemessene Sleep-Energie / gemessene Sleep-Dauer bestimmt.
+Verbrauch wird je Gerät berechnet und anschließend gewichtet kombiniert.
+Bei fester Periode gilt Sleep-Dauer = Periode − jeweilige Wake-Dauer;
+im Sleep-Modus ist die Sleep-Dauer fest, im Duty-Modus proportional zur Wake-Dauer.
 
 #block(inset: 10pt, fill: rgb("f2f6f8"), radius: 3pt)[
   *Laufzeit = nutzbare Batterieenergie / mittlere Leistung*
 ]
 
-Bei mehreren Messungen werden die Kennwerte entsprechend ihrem festen Anteil kombiniert.
-Die Unsicherheit wird durch lineare Fortpflanzung auf der logarithmischen Laufzeitskala
-bestimmt (Delta-Methode); Zusammenhänge innerhalb eines Sleep-/Wake-Paars werden berücksichtigt.
-Die Dichte und P5/P95 beruhen auf einer lognormalen Näherung, deren Median die zentrale
-Laufzeitschätzung ist.
+Die Mittelwertunsicherheit beträgt *#report.results.at(2).at(1)*.
+Die Delta-Methode berücksichtigt gepaarte Wake-Dauer und -Energie bei festem Sleep-Wert je Gerät.
+Die zwischen Geräten beobachtete Varianz wird um Wake-Schätzunsicherheit korrigiert
+und bei null begrenzt. Wake- und Gerätebeiträge werden mit quadrierten Geräteanteilen kombiniert.
+Mehr Zyklen reduzieren Wake-Schätzfehler, nicht dauerhafte Geräteunterschiede.
+Die blaue Dichte und P5/P95 approximieren die Mittelwertunsicherheit lognormal.
 = Gültigkeit und Grenzen
-Vorausgesetzt werden unabhängige, repräsentative Zyklen und unabhängige Messungen.
-Mindestens zwei gültige Zyklen je Messung mit positivem Einfluss sind erforderlich.
-Bei wenigen Zyklen oder großer Streuung ist die Näherung eingeschränkt.
+Jede Messung steht für ein anderes Gerät unter vergleichbaren Bedingungen.
+Unabhängige, repräsentative Wakes und genügend Sleep-Peak-Perioden werden vorausgesetzt.
+Mindestens zwei Zyklen je aktivem Gerät für die Mittelwertunsicherheit,
+zwei aktive Geräte für Gerätestreuung. Ein Gerät erlaubt nur Aussagen zu diesem Gerät.
+Bei wenigen Geräten oder großer Streuung ist die Näherung eingeschränkt.
 
 Batterieenergie, Timing und Messungsanteile gelten als fest.
 Selbstentladung, Alterung, Zustandsänderungen, zeitliche Abhängigkeiten,

@@ -576,9 +576,6 @@ function renderDetectionMetadata(m){
     groups.push(group('Sleep-Referenz','detail-sleep',[
       ['Mittelwert',fmtCurrent(reference.mean_ua)],['Streuung σ',fmtCurrent(reference.std_ua)],
       ['Bereich · 1–99 %',`${fmtCurrent(reference.low_ua)} – ${fmtCurrent(reference.high_ua)}`]
-    ]),group('Sleep-Peaks','detail-neutral',[
-      ['Muster',reference.period_s!=null?'Periodisch bestätigt':'Noch nicht bestätigt'],
-      ...(reference.period_s!=null?[['Abstand',fmtDuration(reference.period_s)],['Beobachtet',`${reference.pulse_count ?? 0} Peaks`]]:[])
     ]));
   }
   if(detection&&detection.mode!=='threshold'){
@@ -598,14 +595,59 @@ function renderSleepAnalysis(data){
     $(`detailSleep${id}`).textContent=format(data?.[key]??null);
   }
   $('detailSleepNote').textContent=`${data?.recorded_segment_count??0} gespeicherte Sleep-Abschnitte, ${data?.background_count??0} zugeordnete Hintergrundereignisse. Die erfassten Kennwerte zählen empfangene Samples ohne Ergänzung von Datenlücken, auch ohne vollständigen Wake-Zyklus. Speicher-Checkpoints sind keine eigenen Sleep-Phasen.`;
-  const phases=data?.valid_phases||[];
-  $('detailSleepPhaseCount').textContent=String(phases.length);
-  $('detailSleepPhaseRows').innerHTML=phases.map(p=>`<tr><td>Vor Wake #${Number(p.following_wake_sequence)}</td><td>${escapeHtml(fmtDuration(p.start_s))}</td><td>${escapeHtml(fmtDuration(p.duration_s))}</td><td>${escapeHtml(fmtCurrent(p.mean_ua))}</td><td>${escapeHtml(fmtCharge(p.charge_uc))}</td><td>${escapeHtml(fmtEnergy(p.energy_uwh))}</td><td>${p.interpolated_samples?'Mit ergänzten Daten':'Vollständig'}</td></tr>`).join('')||'<tr><td colspan="7">Keine Sleep-Phase aus einem gültigen Zyklus verfügbar.</td></tr>';
+}
+
+function renderEventProtocol(m,overview){
+  const rate=m.sample_rate_hz||100000;
+  const cycles=m.cycle_energy||overview.analysis?.confirmed_cycles;
+  const validSleep=m.sleep_analysis?.valid_phases||cycles?.valid_sleep_phases||[];
+  const validWake=new Map((cycles?.valid_wake_phases||[]).map(p=>[p.sequence,p]));
+  const starts=(overview.state_markers||[]).filter(p=>p.kind==='sleep_start'||p.kind==='wake_start').sort((a,b)=>a.t_s-b.t_s);
+  const validSleepByStart=new Map(validSleep.map(p=>[Math.round(p.start_s*rate),p]));
+  const nextWakeByStart=new Map();
+  let nextWake=null;
+  for(let i=starts.length-1;i>=0;--i){
+    const p=starts[i];
+    if(p.kind==='wake_start')nextWake=p.t_s;
+    else nextWakeByStart.set(p.t_s,nextWake);
+  }
+  const sleepStarts=starts.filter(p=>p.kind==='sleep_start');
+  const sleepPhases=sleepStarts.length?sleepStarts.map((p,i)=>{
+    const valid=validSleepByStart.get(Math.round(p.t_s*rate));
+    const end=nextWakeByStart.get(p.t_s)??overview.analysis?.timeline_duration_s??m.duration_s;
+    return {kind:'sleep',label:`Sleep #${i+1}`,start_s:p.t_s,
+      duration_s:end==null?null:Math.max(0,end-p.t_s),...valid,valid:!!valid};
+  }):validSleep.map((p,i)=>({kind:'sleep',label:`Sleep #${i+1}`,valid:true,...p}));
+  const events=[...(m.events||[]),...(m.background_events||[])].sort((a,b)=>a.trigger_sample-b.trigger_sample||a.sequence-b.sequence);
+  let previousWake=null;
+  const rows=events.map(e=>{
+    const background=e.event_kind==='background';
+    const start=e.trigger_sample!=null?e.trigger_sample/rate:e.trigger_at&&m.started_at?(new Date(e.trigger_at)-new Date(m.started_at))/1000:0;
+    const period=!background&&previousWake!=null?start-previousWake:null;
+    if(!background)previousWake=start;
+    const valid=background?null:validWake.get(e.sequence);
+    return {kind:background?'background':'wake',label:`${background?'Hintergrund':'Wake'} #${Number(e.sequence)}`,
+      id:e.id,start_s:start,period_s:period,duration_s:e.duration_us==null?null:e.duration_us/1e6,
+      mean_ua:e.mean_ua,peak_ua:e.peak_ua,charge_uc:e.charge_uc,
+      energy_uwh:e.charge_uc==null||m.voltage_mv==null?null:e.charge_uc*m.voltage_mv/1000/3600,
+      digital_mask_seen:e.digital_mask_seen,...valid,valid:!!valid};
+  });
+  rows.push(...sleepPhases);
+  rows.sort((a,b)=>a.start_s-b.start_s);
+  $('wakeEventCount').textContent=`${sleepPhases.length} Sleep / ${(m.events||[]).length} Wake / ${(m.background_events||[]).length} Hintergrund`;
+  $('eventProtocol').open=false;
+  $('eventRows').innerHTML=rows.map(p=>{
+    const tone=p.kind==='sleep'?'detail-sleep':p.kind==='wake'?'detail-wake':'detail-neutral';
+    const label=p.id!=null?`<button class="event-open ${tone}" aria-label="${escapeHtml(p.label)} öffnen">${escapeHtml(p.label)}</button>`:`<span class="${tone}">${escapeHtml(p.label)}</span>`;
+    const data=p.interpolated_samples?'Mit ergänzten Daten':p.valid?'Gültiger Zyklus':p.kind==='background'?'Im Sleep enthalten':'Ohne gültigen Zyklus';
+    return `<tr${p.id!=null?` data-event="${Number(p.id)}"`:''}><td>${label}</td><td>${escapeHtml(fmtDuration(p.start_s))}</td><td>${escapeHtml(fmtDuration(p.period_s))}</td><td>${escapeHtml(fmtEventDuration(p.duration_s==null?null:p.duration_s*1e6))}</td><td>${escapeHtml(fmtCurrent(p.mean_ua))}</td><td>${escapeHtml(fmtCurrent(p.peak_ua))}</td><td>${escapeHtml(fmtCharge(p.charge_uc))}</td><td>${escapeHtml(fmtEnergy(p.energy_uwh))}</td><td>${p.digital_mask_seen==null?'—':`0x${Number(p.digital_mask_seen).toString(16).padStart(2,'0')}`}</td><td>${data}</td></tr>`;
+  }).join('')||'<tr><td colspan="10">Keine Sleep- oder Wake-Phasen verfügbar.</td></tr>';
+  document.querySelectorAll('#eventRows tr[data-event]').forEach(r=>r.addEventListener('click',()=>openEvent(Number(r.dataset.event))));
 }
 function renderMeasurementDetail(m,overview){
   renderSleepAnalysis(m.sleep_analysis);
   const a=overview.analysis||{};
-  CycleEnergyUI.render(m.cycle_energy||a.confirmed_cycles,'detail');
+  WakeAnalysisUI.render(m.cycle_energy||a.confirmed_cycles,'detail');
   $('detailStatus').textContent=({completed:'Abgeschlossen',failed:'Fehlgeschlagen',cancelled:'Abgebrochen',recording:'Aufzeichnung',scheduled:'Geplant',starting:'Startet'})[m.status]||m.status||'—';
   $('detailStatus').className=`status-badge ${['completed','failed','cancelled','recording','scheduled','starting'].includes(m.status)?m.status:''}`;
   $('detailName').textContent=m.name;
@@ -649,14 +691,7 @@ function renderMeasurementDetail(m,overview){
   $('ppkConfigDetails').classList.remove('hidden');
   $('ppkConfigJson').textContent=JSON.stringify(ppk,null,2);
 
-  const events=[...(m.events||[]),...(m.background_events||[])].sort((a,b)=>a.sequence-b.sequence);
-  $('wakeEventCount').textContent=`${(m.events||[]).length} Wake / ${(m.background_events||[]).length} Hintergrund`;
-  $('eventRows').innerHTML=events.map((e,i)=>{
-    const prev=e.event_kind==='background'?null:events.slice(0,i).filter(p=>p.event_kind!=='background').at(-1);
-    const period=prev&&prev.trigger_at&&e.trigger_at?(new Date(e.trigger_at)-new Date(prev.trigger_at))/1000:null;
-    return `<tr data-event="${Number(e.id)}"><td><button class="event-open ${e.event_kind==='background'?'detail-neutral':'detail-wake'}" aria-label="${e.event_kind==='background'?'Hintergrund':'Wake'}-Ereignis ${Number(e.sequence)} öffnen">${e.event_kind==='background'?'Hintergrund':'Wake'} #${Number(e.sequence)}</button></td><td>${escapeHtml(fmtDate(e.trigger_at))}</td><td>${escapeHtml(period==null?'—':fmtDuration(period))}</td><td>${escapeHtml(fmtEventDuration(e.duration_us))}</td><td>${escapeHtml(fmtCurrent(e.mean_ua))}</td><td>${escapeHtml(fmtCurrent(e.peak_ua))}</td><td>${escapeHtml(fmtCharge(e.charge_uc))}</td><td>0x${Number(e.digital_mask_seen||0).toString(16).padStart(2,'0')}</td></tr>`;
-  }).join('')||'<tr><td colspan="8" style="color:#77838e">Keine Wake-Events erkannt.</td></tr>';
-  document.querySelectorAll('#eventRows tr[data-event]').forEach(r=>r.addEventListener('click',()=>openEvent(Number(r.dataset.event))));
+  renderEventProtocol(m,overview);
 
   $('exportJson').href=`/api/measurements/${m.id}/export/json`;
   $('exportPdf').href=`/api/measurements/${m.id}/export/pdf`;
@@ -679,13 +714,36 @@ function selectEventRow(id=null){
 }
 function showHistoryOverview(){
   hideCurrentTooltip();
+  $('historyOverviewChart').blur?.();
   $('historyOverviewCard').classList.remove('hidden');
   $('wakeEventCard').classList.add('hidden');
   selectEventRow(null);
 }
 function showWakeEventPanel(){
+  $('historyOverviewChart').blur?.();
   $('historyOverviewCard').classList.add('hidden');
   $('wakeEventCard').classList.remove('hidden');
+}
+
+function bindOverviewScrollZoom(el){
+  if(el.dataset.scrollZoomBound==='1')return;
+  el.dataset.scrollZoomBound='1';
+  const hint=$('historyOverviewZoomHint');
+  const update=()=>{
+    const active=document.activeElement===el;
+    el.classList.toggle('scroll-zoom-active',active);
+    hint.textContent=active?'Scroll-Zoom aktiv · Außerhalb klicken oder Esc zum Beenden.':'Chart anklicken, um mit dem Mausrad zu zoomen.';
+  };
+  el.addEventListener('wheel',ev=>{
+    // Let the browser scroll the page while keeping Plotly from handling the wheel.
+    if(document.activeElement!==el)ev.stopImmediatePropagation();
+  },{capture:true,passive:true});
+  el.addEventListener('pointerdown',()=>el.focus({preventScroll:true}));
+  el.addEventListener('focus',update);
+  el.addEventListener('blur',update);
+  el.addEventListener('keydown',ev=>{if(ev.key==='Escape')el.blur()});
+  document.addEventListener('pointerdown',ev=>{if(document.activeElement===el&&!el.contains(ev.target))el.blur()});
+  update();
 }
 
 function renderOverviewChart(overview,{force=false}={}){
@@ -748,6 +806,7 @@ function renderOverviewChart(overview,{force=false}={}){
 
   queueHistoryPlot(renderToken,'overview',async()=>{
     const el=$('historyOverviewChart');
+    bindOverviewScrollZoom(el);
     el.removeAllListeners?.('plotly_click');
     await Plotly.react(el,traces,layout,plotConfig);
     if(renderToken!==state.historyRenderToken||state.historyMode!=='overview')return;
@@ -1014,7 +1073,7 @@ function updateEventSettings(){
 }
 CurrentInputs.install();
 TimeInputs.install();
-CycleEnergyUI.install();
+WakeAnalysisUI.install();
 MeasurementPreview.install();
 BatteryLifeUI.install();
 $('measurementForm').addEventListener('input',updateEventSettings);

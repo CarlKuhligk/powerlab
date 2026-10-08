@@ -36,7 +36,7 @@ function harness(){
     location:{protocol:'http:',host:'localhost'},Date:class extends Date{static now(){return now}},
     setTimeout(fn){const id=++timerId;timers.set(id,fn);return id},clearTimeout:id=>timers.delete(id),setInterval(){},
     fetch(url,options){const d=deferred();requests.push({url,options,resolve:data=>d.resolve({ok:true,status:200,json:async()=>data,blob:async()=>data}),reject:message=>d.resolve({ok:false,status:409,json:async()=>({detail:message})})});return d.promise},
-    Plotly:{react:async(...args)=>{plots.push(args)},purge(){}},CycleEnergyUI:{render(){}},confirm:()=>true,prompt:()=>null,
+    Plotly:{react:async(...args)=>{plots.push(args)},purge(){}},WakeAnalysisUI:{render(){}},confirm:()=>true,prompt:()=>null,
   });
   const source=fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8').replace(/^init\(\);\s*$/m,'').replace(/^CurrentInputs.install\(\);[\s\S]*$/m,'');
   vm.runInContext(`${source}\nglobalThis.ui={state,setView,openSession,openMeasurement,openEvent,connectSessionLive,refreshLiveSeries,renderLiveOverview,renderMeasurementRows,deleteSelectedMeasurements,exportSelectedMeasurements,smoothEventCurrent,updateScheduleFields,scheduleStopText,measurementPayload,renderDevices,startDeviceDiscovery};`,context);

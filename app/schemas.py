@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class BatteryReportRequest(BaseModel):
     energy_wh: float = Field(gt=0, le=1e12, allow_inf_nan=False)
-    mode: Literal['sleep', 'duty']
+    mode: Literal['sleep', 'duty', 'period']
     value: float = Field(ge=0, le=1e12, allow_inf_nan=False)
     # Optional only for compatibility with the previous timing-curve export.
     range_min: float | None = Field(default=None, ge=0, le=1e12, allow_inf_nan=False)
@@ -18,6 +18,8 @@ class BatteryReportRequest(BaseModel):
 
     @model_validator(mode='after')
     def validate_range(self):
+        if self.mode == 'period' and self.value <= 0:
+            raise ValueError('Periodendauer muss positiv sein.')
         if self.mode == 'duty' and not 0 < self.value <= 100:
             raise ValueError('Duty-Cycle muss über 0 bis 100 % liegen.')
         if self.range_min is not None or self.range_max is not None:

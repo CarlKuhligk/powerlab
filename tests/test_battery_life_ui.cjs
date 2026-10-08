@@ -44,10 +44,11 @@ test('runtime scales with capacity, timing and observed joint variance',()=>{
   const point=model.evaluate(data,1,'sleep',9);
   close(data.sleepPowerUw,60);
   close(data.statistics.wakeEnergy.variance,2);
-  close(data.statistics.sleepPower.variance,648);
+  assert.equal(data.statistics.sleepPower.variance,null);
+  close(data.statistics.sleepCurrent.mean,60/3.3);
   close(point.expectedH,1e6/((2*3600+60*9)/10.5));
-  close(point.minH,1e6/((3*3600+72*9)/11));
-  close(point.maxH,1e6/((1*3600+36*9)/10));
+  close(point.minH,1e6/((3*3600+60*9)/11));
+  close(point.maxH,1e6/((1*3600+60*9)/10));
   close(point.medianH,(point.minH+point.maxH)/2);
   close(model.evaluate(data,2,'sleep',9).expectedH,point.expectedH*2);
   close(model.evaluate(data,1,'duty',point.dutyPct).expectedH,point.expectedH);
@@ -167,6 +168,9 @@ test('measurement shares affect means, variance and percentiles; zero weight rem
   assert.notEqual(model.evaluate(mostlyA,1,'sleep',9).medianH,model.evaluate(equal,1,'sleep',9).medianH);
   const onlyA=model.combine([{...sources[0],weight:1},{...sources[1],weight:0}],'custom');
   assert.equal(onlyA.count,2);close(onlyA.statistics.wakeEnergy.max,3);
+  const extreme=model.combine([{id:'a',summary:summary(),weight:1e12},{id:'b',summary:summary(),weight:1e-12}],'custom');
+  assert.equal(model.uncertainty(extreme,1,'sleep',20).available,false);
+  assert.equal(model.deviceDistribution(extreme,1,'sleep',20).available,false);
   assert.throws(()=>model.combine(sources.map(s=>({...s,weight:0})),'custom'));
 });
 
@@ -193,6 +197,8 @@ test('PDF download uses the server timestamp and needs no browser image export',
   h.requests[0].resolve([{id:'chosen',name:'Chosen',status:'completed'}]);
   await new Promise(r=>setImmediate(r));
   h.requests[1].resolve(summary());await opening;await h.flush();
+  h.el('Mode').value='period';h.el('Mode').listeners.change();await h.flush();
+  h.el('Value').value='10';h.el('Value').listeners.input();await h.flush();
   const filename='battery_life_combined_2026-10-07_13-14-15_123456Z.pdf';
   let posted,download;
   h.context.fetch=async(url,options)=>{
@@ -205,7 +211,48 @@ test('PDF download uses the server timestamp and needs no browser image export',
   assert.equal(posted.url,'/api/battery-report');
   assert.ok(!('chart_png' in posted.body));
   assert.equal(posted.body.energy_wh,1);
+  assert.equal(posted.body.mode,'period');assert.equal(posted.body.value,10);
   assert.deepEqual(posted.body.sources,[{measurement_id:'chosen',weight:1}]);
   assert.deepEqual(download,{filename,url:'blob:report'});
   assert.equal(h.el('Export').disabled,false);
+});
+
+test('stable devices keep distinct Sleep means and show separate runtime scatter',async()=>{
+  const h=harness();h.ui.install();
+  function stable(power){
+    const s=summary();
+    s.valid_wake_phases.forEach(w=>{w.duration_s=1;w.energy_uwh=1});
+    s.valid_sleep_phases.forEach(p=>{p.energy_uwh=power*p.duration_s/3600});
+    return s;
+  }
+  const opening=h.ui.open();
+  h.requests[0].resolve([{id:'a',name:'A',status:'completed'},{id:'b',name:'B',status:'completed'}]);
+  await new Promise(r=>setImmediate(r));h.requests[1].resolve(stable(33));await opening;await h.flush();
+  assert.equal(h.el('DeviceBand').textContent,'Nicht schätzbar');
+  h.node('select','b').checked=true;h.node('select','b').listeners.change();
+  h.requests[2].resolve(stable(66));await new Promise(r=>setImmediate(r));await h.flush();
+  assert.match(h.el('DeviceBand').textContent,/bis/);
+  assert.match(h.el('DeviceNote').textContent,/2 Geräte/);
+  assert.match(h.el('StatisticsRows').innerHTML,/Sleep-Strom · Gerätemittel/);
+  assert.doesNotMatch(h.el('StatisticsRows').innerHTML,/Sleep-Energie/);
+  h.el('Mode').value='period';h.el('Mode').listeners.change();await h.flush();
+  assert.equal(h.el('TimeUnit').disabled,false);
+  assert.match(h.el('ValueLabel').textContent,/Periodendauer/);
+  h.el('Value').value='10';h.el('Value').listeners.input();await h.flush();
+  assert.match(h.el('Band').textContent,/bis/);
+  assert.ok(h.plots.at(-1).traces.some(t=>t.fill==='tozeroy'));
+  h.el('Value').value='.5';h.el('Value').listeners.input();await h.flush();
+  assert.equal(h.el('Export').disabled,true);
+  assert.match(h.el('Status').textContent,/jede gültige Wake-Phase/);
+  assert.equal(h.el('DeviceBand').textContent,'—');
+});
+
+test('period defaults use consecutive Wake beginnings and skip incomplete intervals',()=>{
+  const {model}=harness(),s=summary();
+  s.valid_wake_phases[0].start_s=1;s.valid_wake_phases[1].start_s=20;
+  s.valid_sleep_phases[0].start_s=0;s.valid_sleep_phases[1].start_s=2;
+  close(model.profile(s).medianPeriodS,19);
+  close(model.combine([{id:'a',summary:s}]).medianPeriodS,19);
+  s.valid_sleep_phases[1].start_s=5; // An intervening invalid Wake breaks the interval.
+  assert.equal(model.profile(s).medianPeriodS,null);
 });

@@ -1,6 +1,6 @@
 /* Battery energy and measured complete cycles, with adjustable future timing. */
 const BatteryLifeModel=(()=>{
-  const average=values=>values.reduce((sum,value)=>sum+value,0)/values.length;
+  const average=values=>values[0]+values.reduce((sum,value)=>sum+(value-values[0]),0)/values.length;
   function statistics(values){
     const mean=average(values),variance=values.length>1?values.reduce((n,x)=>n+(x-mean)**2,0)/(values.length-1):null;
     return {mean,variance,stddev:variance==null?null:Math.sqrt(variance),min:values.reduce((a,b)=>Math.min(a,b)),max:values.reduce((a,b)=>Math.max(a,b))};
@@ -29,6 +29,7 @@ const BatteryLifeModel=(()=>{
     return {mean,variance,stddev:variance==null?null:Math.sqrt(variance),min:values.reduce((a,b)=>Math.min(a,b)),max:values.reduce((a,b)=>Math.max(a,b))};
   }
   function profile(summary){
+    if(!Number.isFinite(summary?.voltage_v)||summary.voltage_v<=0)throw new Error('Positive Messspannung für die Stromberechnung erforderlich.');
     const sleeps=new Map((summary?.valid_sleep_phases||[]).map(p=>[p.following_wake_sequence,p]));
     const samples=(summary?.valid_wake_phases||[]).map(w=>{
       const s=sleeps.get(w.sequence);
@@ -40,32 +41,48 @@ const BatteryLifeModel=(()=>{
         sleepPowerUw:s.energy_uwh*3600/s.duration_s,sleepEnergyUwh:s.energy_uwh};
     });
     if(!samples.length)throw new Error('Diese Messung enthält noch keinen vollständig gültigen Sleep → Wake → Sleep-Zyklus.');
+    const origin=samples[0].sleepPowerUw;
+    const sleepPowerUw=origin+samples.reduce((n,s)=>n+(s.sleepPowerUw-origin)*s.sleepS,0)/samples.reduce((n,s)=>n+s.sleepS,0);
+    samples.forEach(s=>{s.sleepPowerUw=sleepPowerUw});
+    const periodsS=[],wakes=summary.valid_wake_phases;
+    for(let i=1;i<wakes.length;i++){
+      const previous=wakes[i-1],wake=wakes[i],sleep=sleeps.get(wake.sequence);
+      if([previous.start_s,wake.start_s,sleep.start_s].every(Number.isFinite)
+          &&Math.abs(sleep.start_s-previous.start_s-previous.duration_s)<1e-8
+          &&wake.start_s>previous.start_s)periodsS.push(wake.start_s-previous.start_s);
+    }
     return {samples,count:samples.length,voltageV:summary.voltage_v,
       interpolatedCount:summary.interpolated_cycle_count||0,
       statistics:{sleepEnergy:summary.sleep_variability?.energy_uwh||statistics(samples.map(s=>s.sleepEnergyUwh)),
         wakeEnergy:summary.wake_variability?.energy_uwh||statistics(samples.map(s=>s.wakeEnergyUwh)),
-        sleepPower:statistics(samples.map(s=>s.sleepPowerUw))},
+        wakeDuration:statistics(samples.map(s=>s.wakeS)),sleepPower:statistics([sleepPowerUw]),
+        sleepCurrent:statistics([sleepPowerUw/summary.voltage_v])},
       wakeS:average(samples.map(s=>s.wakeS)),wakeEnergyUwh:average(samples.map(s=>s.wakeEnergyUwh)),
-      sleepPowerUw:samples.reduce((n,s)=>n+s.sleepEnergyUwh,0)*3600/samples.reduce((n,s)=>n+s.sleepS,0),
+      sleepPowerUw,sleepCurrentUa:sleepPowerUw/summary.voltage_v,
       medianSleepS:quantile(samples.map(s=>s.sleepS),.5),
+      periodsS,medianPeriodS:periodsS.length?quantile(periodsS,.5):null,
       medianDutyPct:quantile(samples.map(s=>100*s.wakeS/(s.wakeS+s.sleepS)),.5),
       medianWakeEnergyUwh:quantile(samples.map(s=>s.wakeEnergyUwh),.5)};
   }
   function evaluate(data,energyWh,mode,value){
     if(!Number.isFinite(energyWh)||energyWh<=0)throw new Error('Bitte eine positive nutzbare Batterieenergie eingeben.');
-    if(!['sleep','duty'].includes(mode)||!Number.isFinite(value)||value<0
+    if(!['sleep','duty','period'].includes(mode)||!Number.isFinite(value)||value<0
         ||(mode==='duty'&&(value<=0||value>100)))throw new Error('Sleep-Dauer muss mindestens 0 sein; Duty-Cycle muss über 0 und höchstens 100 % liegen.');
-    const sleepS=mode==='sleep'?value:data.wakeS*(100/value-1);
-    const powerUw=(data.wakeEnergyUwh*3600+data.sleepPowerUw*sleepS)/(data.wakeS+sleepS);
+    if(mode==='period'&&(value<=0||data.samples.some(s=>s.wakeS>value)))throw new Error('Periodendauer muss mindestens so lang wie jede gültige Wake-Phase sein.');
+    const sleepS=mode==='sleep'?value:mode==='period'?value-data.wakeS:data.wakeS*(100/value-1);
+    const groups=data.groups||[{data,share:1}];
+    const plannedSleep=d=>mode==='sleep'?value:mode==='period'?value-d.wakeS:d.wakeS*(100/value-1);
+    const cycleEnergyUws=groups.reduce((n,g)=>n+g.share*(g.data.wakeEnergyUwh*3600+g.data.sleepPowerUw*plannedSleep(g.data)),0);
+    const powerUw=cycleEnergyUws/(data.wakeS+sleepS);
     const hours=power=>power===0?Infinity:energyWh*1e6/power;
     const scenarios=data.samples.map(s=>{
-      const plannedSleep=mode==='sleep'?value:s.wakeS*(100/value-1);
+      const plannedSleep=mode==='sleep'?value:mode==='period'?value-s.wakeS:s.wakeS*(100/value-1);
       return hours((s.wakeEnergyUwh*3600+s.sleepPowerUw*plannedSleep)/(s.wakeS+plannedSleep));
     });
     const percentile=q=>data.weights?weightedQuantile(scenarios,data.weights,q):quantile(scenarios,q);
     return {expectedH:hours(powerUw),minH:percentile(0),p05H:percentile(.05),
       lowH:percentile(.1),highH:percentile(.9),p95H:percentile(.95),maxH:percentile(1),
-      medianH:percentile(.5),powerUw,sleepS,dutyPct:100*data.wakeS/(data.wakeS+sleepS),scenariosH:scenarios};
+      medianH:percentile(.5),powerUw,sleepS,cycleEnergyUws,dutyPct:100*data.wakeS/(data.wakeS+sleepS),scenariosH:scenarios};
   }
   function distribution(data,energyWh,mode,value){
     const point=evaluate(data,energyWh,mode,value);
@@ -111,17 +128,23 @@ const BatteryLifeModel=(()=>{
       details.push({id:source.id,name:source.name,count:data.count,weight,share,voltageV:data.voltageV});
       if(share)for(const sample of data.samples){samples.push(sample);weights.push(share/data.count)}
     }
-    const weightedMean=key=>prepared.reduce((n,s)=>n+s.data[key]*s.weight/total,0);
+    const weightedMean=key=>{const origin=prepared.find(s=>s.weight>0).data[key];return origin+prepared.reduce((n,s)=>n+(s.data[key]-origin)*s.weight/total,0)};
     const percentile=(key,q=.5)=>weightedQuantile(samples.map(s=>s[key]),weights,q);
+    const periods=[],periodWeights=[];
+    for(const {data,weight} of prepared)if(weight>0)for(const period of data.periodsS){periods.push(period);periodWeights.push(weight/total/data.periodsS.length)}
     return {samples,weights,sources:details,groups:prepared.filter(s=>s.weight>0).map(s=>({data:s.data,share:s.weight/total})),weighting,count:samples.length,
       activeMeasurementCount:details.filter(s=>s.share>0).length,
       voltageV:[...new Set(details.filter(s=>s.share>0).map(s=>s.voltageV))].join(' / '),
       interpolatedCount:prepared.reduce((n,s)=>n+(s.weight?s.data.interpolatedCount:0),0),
       wakeS:weightedMean('wakeS'),wakeEnergyUwh:weightedMean('wakeEnergyUwh'),sleepPowerUw:weightedMean('sleepPowerUw'),
       medianSleepS:percentile('sleepS'),medianDutyPct:weightedQuantile(samples.map(s=>100*s.wakeS/(s.wakeS+s.sleepS)),weights,.5),
+      medianPeriodS:periods.length?weightedQuantile(periods,periodWeights,.5):null,
       medianWakeEnergyUwh:percentile('wakeEnergyUwh'),
       statistics:{wakeEnergy:weightedStatistics(samples.map(s=>s.wakeEnergyUwh),weights),
-        sleepEnergy:weightedStatistics(samples.map(s=>s.sleepEnergyUwh),weights),sleepPower:weightedStatistics(samples.map(s=>s.sleepPowerUw),weights)}};
+        wakeDuration:weightedStatistics(samples.map(s=>s.wakeS),weights),
+        sleepEnergy:weightedStatistics(samples.map(s=>s.sleepEnergyUwh),weights),
+        sleepPower:weightedStatistics(prepared.filter(s=>s.weight>0).map(s=>s.data.sleepPowerUw),prepared.filter(s=>s.weight>0).map(s=>s.weight/total)),
+        sleepCurrent:weightedStatistics(prepared.filter(s=>s.weight>0).map(s=>s.data.sleepCurrentUa),prepared.filter(s=>s.weight>0).map(s=>s.weight/total))}};
   }
   function curve(data,energyWh,mode,min,max,count=121){
     if(!Number.isFinite(min)||!Number.isFinite(max)||min>=max)throw new Error('Das Kurvenmaximum muss größer als das Minimum sein.');
@@ -130,22 +153,46 @@ const BatteryLifeModel=(()=>{
       return {x,...evaluate(data,energyWh,mode,x)};
     });
   }
+  function deviceDistribution(data,energyWh,mode,value){
+    const groups=data.groups||[{data,share:1}],runtimesH=groups.map(g=>evaluate(g.data,energyWh,mode,value).expectedH);
+    const result={available:false,count:groups.length,runtimesH,stddevH:null,varianceH2:null,percentilesH:{},reason:''};
+    if(groups.length<2)result.reason='Mindestens zwei Geräte mit positivem Einfluss für die Gerätestreuung erforderlich.';
+    else if(!runtimesH.every(Number.isFinite))result.reason='Mindestens ein Gerät hat keine endliche Laufzeit im Modell.';
+    else{
+      const weights=groups.map(g=>g.share),stats=weightedStatistics(runtimesH,weights);
+      if(stats.stddev==null){result.reason='Gerätegewichte erlauben keine numerisch stabile Streuungsschätzung.';return result}
+      Object.assign(result,{available:true,stddevH:stats.stddev,varianceH2:stats.variance,
+        percentilesH:Object.fromEntries([5,50,95].map(p=>[p,weightedQuantile(runtimesH,weights,p/100)]))});
+    }
+    return result;
+  }
   function uncertainty(data,energyWh,mode,value){
     const original=evaluate(data,energyWh,mode,value),center=original.expectedH;
     const groups=data.groups||[{data,share:1}];
-    const result={point:{...original},meanH:center,standardErrorH:null,logVariance:null,density:[],available:false,reason:''};
+    const result={point:{...original},meanH:center,standardErrorH:null,logVariance:null,density:[],available:false,reason:'',withinLogVariance:null,betweenLogVariance:null,deviceLogVariance:null};
     if(!Number.isFinite(center)){result.reason='Kein mittlerer Verbrauch: keine endliche Laufzeitschätzung.';return result}
     if(groups.some(g=>g.data.count<2)){result.reason='Für die Unsicherheit sind mindestens zwei gültige Zyklen je Messung mit positivem Einfluss erforderlich.';return result}
-    const t=original.sleepS,A=3600*data.wakeEnergyUwh+data.sleepPowerUw*t;
-    const gW=-3600/A,gS=-t/A;
-    const gD=mode==='sleep'?1/(data.wakeS+t):1/data.wakeS-data.sleepPowerUw*(100/value-1)/A;
-    let logVariance=0;
+    const t=original.sleepS,A=original.cycleEnergyUws,gW=-3600/A;
+    const withinVariances=[],deviceInfluences=[],shares=[];
     for(const group of groups){
-      const d=group.data,meanSleep=average(d.samples.map(s=>s.sleepS));
-      const influences=d.samples.map(s=>gW*(s.wakeEnergyUwh-d.wakeEnergyUwh)+gD*(s.wakeS-d.wakeS)+
-        gS*(s.sleepEnergyUwh*3600-d.sleepPowerUw*s.sleepS)/meanSleep);
-      logVariance+=group.share**2*statistics(influences).variance/d.count;
+      const d=group.data;
+      const gD=mode==='period'?d.sleepPowerUw/A:mode==='sleep'?1/(data.wakeS+t):1/data.wakeS-d.sleepPowerUw*(100/value-1)/A;
+      const influences=d.samples.map(s=>gW*(s.wakeEnergyUwh-d.wakeEnergyUwh)+gD*(s.wakeS-d.wakeS));
+      withinVariances.push(statistics(influences).variance/d.count);shares.push(group.share);
+      const devicePoint=evaluate(d,energyWh,mode,value);
+      deviceInfluences.push(-(devicePoint.cycleEnergyUws-A)/A+(d.wakeS+devicePoint.sleepS-data.wakeS-t)/(data.wakeS+t));
     }
+    const squaredShares=shares.reduce((n,w)=>n+w*w,0);
+    if(groups.length>1&&1-squaredShares<=1e-15){result.reason='Gerätegewichte erlauben keine numerisch stabile Streuungsschätzung.';return result}
+    const within=shares.reduce((n,w,i)=>n+w*w*withinVariances[i],0);
+    let deviceVariance=null;
+    if(groups.length>1){
+      const observed=weightedStatistics(deviceInfluences,shares).variance;
+      const noise=shares.reduce((n,w,i)=>n+w*(1-w)*withinVariances[i],0)/(1-squaredShares);
+      deviceVariance=Math.max(0,observed-noise);
+    }
+    const between=(deviceVariance||0)*squaredShares,logVariance=within+between;
+    Object.assign(result,{withinLogVariance:within,betweenLogVariance:between,deviceLogVariance:deviceVariance});
     const sigma=Math.sqrt(Math.max(0,logVariance));
     result.available=true;result.logVariance=logVariance;result.standardErrorH=center*sigma;
     const q=z=>center*Math.exp(z*sigma);
@@ -158,7 +205,7 @@ const BatteryLifeModel=(()=>{
     });
     result.reason='';return result;
   }
-  return {profile,combine,evaluate,curve,distribution,uncertainty};
+  return {profile,combine,evaluate,curve,distribution,deviceDistribution,uncertainty};
 })();
 
 const BatteryLifeUI=(()=>{
@@ -169,24 +216,25 @@ const BatteryLifeUI=(()=>{
   const life=hours=>!Number.isFinite(hours)?'Kein Verbrauch im Modell':hours>=8760?`${(hours/8760).toLocaleString('de-DE',{maximumFractionDigits:2})} Jahre`:hours>=48?`${(hours/24).toLocaleString('de-DE',{maximumFractionDigits:2})} Tage`:`${hours.toLocaleString('de-DE',{maximumFractionDigits:2})} Stunden`;
   const finite=value=>Number.isFinite(value)?value:null;
   const mode=()=>el('Mode').value;
-  const factor=()=>mode()==='sleep'?timeUnits[el('TimeUnit').value]:1;
-  const unit=()=>mode()==='sleep'?({seconds:'s',minutes:'min',hours:'h'}[el('TimeUnit').value]):'%';
+  const factor=()=>mode()!=='duty'?timeUnits[el('TimeUnit').value]:1;
+  const unit=()=>mode()!=='duty'?({seconds:'s',minutes:'min',hours:'h'}[el('TimeUnit').value]):'%';
   const number=value=>value.toLocaleString('de-DE',{maximumSignificantDigits:5});
   function status(message,error=false){el('Status').textContent=message;el('Status').classList.toggle('event-load-error',error)}
   function clear(){
     ++renderToken;clearTimeout(timer);
-    for(const id of ['Runtime','Band','Power','Timing','WakeEnergy'])el(id).textContent='—';
+    for(const id of ['Runtime','Band','Power','Timing','WakeEnergy','DeviceBand','DeviceSpread'])el(id).textContent='—';
+    el('DeviceNote').textContent='';
     el('DistributionNote').textContent='';el('MeasuredMedian').textContent='';
     el('PercentileRows').innerHTML='';el('StatisticsRows').innerHTML='';el('Export').disabled=true;
     Plotly.purge(el('Chart'));
   }
   function resetTiming(){
-    const isSleep=mode()==='sleep';
-    el('TimeUnit').disabled=!isSleep;
-    el('ValueLabel').textContent=isSleep?'Sleep-Dauer zwischen Wakes':'Wake-Duty-Cycle';
-    el('Value').min=isSleep?'0':'0.000001';el('Value').max=isSleep?'':'100';
-    const typical=data?(isSleep?data.medianSleepS/factor():data.medianDutyPct):(isSleep?60/factor():1);
-    const selected=Math.max(isSleep?.001:.000001,Math.min(isSleep?Infinity:100,typical));
+    const isTime=mode()!=='duty',isPeriod=mode()==='period';
+    el('TimeUnit').disabled=!isTime;
+    el('ValueLabel').textContent=isPeriod?'Periodendauer · Wake-Beginn zu Wake-Beginn':isTime?'Sleep-Dauer zwischen Wakes':'Wake-Duty-Cycle';
+    el('Value').min=mode()==='sleep'?'0':'0.000001';el('Value').max=isTime?'':'100';
+    const typical=data?(isPeriod?data.samples.reduce((n,s)=>Math.max(n,s.wakeS),data.medianPeriodS??data.medianSleepS+data.wakeS)/factor():isTime?data.medianSleepS/factor():data.medianDutyPct):(isTime?60/factor():1);
+    const selected=Math.max(isTime?.001:.000001,Math.min(isTime?Infinity:100,typical));
     el('Value').value=Number(selected.toPrecision(6));
     schedule();
   }
@@ -205,17 +253,21 @@ const BatteryLifeUI=(()=>{
     try{
       const {energyWh,value}=settings();
       const distribution=BatteryLifeModel.uncertainty(data,energyWh,mode(),value);
+      const devices=BatteryLifeModel.deviceDistribution(data,energyWh,mode(),value);
       const point=distribution.point,hasCurve=distribution.density.length>0;
-      const median=mode()==='sleep'?data.medianSleepS:data.medianDutyPct;
-      el('MeasuredMedian').textContent=`Gemessener Median: ${number(median/factor())} ${unit()}`;
+      const median=mode()==='period'?data.medianPeriodS:mode()==='sleep'?data.medianSleepS:data.medianDutyPct;
+      el('MeasuredMedian').textContent=median==null?'Keine vollständigen Wake-zu-Wake-Abstände verfügbar.':`Gemessener Median${mode()==='period'?' der Wake-zu-Wake-Abstände':''}: ${number(median/factor())} ${unit()}`;
       el('Runtime').textContent=life(point.expectedH);
       el('Band').textContent=distribution.available?`${life(point.p05H)} bis ${life(point.p95H)}`:'Nicht schätzbar';
       el('Power').textContent=point.powerUw>=1000?`${number(point.powerUw/1000)} mW`:`${number(point.powerUw)} µW`;
+      el('DeviceBand').textContent=devices.available?`${life(devices.percentilesH[5])} bis ${life(devices.percentilesH[95])}`:'Nicht schätzbar';
+      el('DeviceSpread').textContent=devices.available?life(devices.stddevH):'Nicht schätzbar';
+      el('DeviceNote').textContent=devices.reason||`${devices.count} Geräte: beobachtete gewichtete Laufzeitperzentile aus den Gerätemittelwerten. Kein Prognoseintervall für weitere Geräte.`;
       el('Timing').textContent=`Sleep ${fmtDuration(point.sleepS)} · Wake ${fmtEventDuration(data.wakeS*1e6)} · Duty ${number(point.dutyPct)} %`;
       el('WakeEnergy').textContent=fmtEnergy(data.medianWakeEnergyUwh);
       el('DistributionNote').textContent=distribution.reason||`Standardunsicherheit der mittleren Laufzeit: ${life(distribution.standardErrorH)}. Das Intervall ist eine statistische Näherung und keine Laufzeitgarantie.`;
       el('PercentileRows').innerHTML=[['Untere 90-%-Grenze · P5',5,'p05H'],['P10',10,'lowH'],['Laufzeitschätzung · P50',50,'medianH'],['P90',90,'highH'],['Obere 90-%-Grenze · P95',95,'p95H']].map(([label,p,key])=>`<tr><td>${label}</td><td>${p} %</td><td>${distribution.available?life(point[key]):'Nicht schätzbar'}</td></tr>`).join('');
-      el('StatisticsRows').innerHTML=[['Wake-Energie','wakeEnergy','µWh'],['Sleep-Energie · gemessene Dauer','sleepEnergy','µWh'],['Sleep-Leistung · auf Dauer normiert','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}</tr>`).join('');
+      el('StatisticsRows').innerHTML=[['Wake-Dauer · Zyklen','wakeDuration','s'],['Wake-Energie · Zyklen','wakeEnergy','µWh'],['Sleep-Strom · Gerätemittel','sleepCurrent','µA'],['Sleep-Leistung · Gerätemittel','sleepPower','µW']].map(([label,key,u])=>`<tr><td>${label}</td>${[['mean',u],['min',u],['max',u],['stddev',u],['variance',u+'²']].map(([field,unit])=>`<td>${data.statistics[key][field]==null?'—':number(data.statistics[key][field])+' '+unit}</td>`).join('')}<td>${data.statistics[key].stddev!=null&&data.statistics[key].mean?number(100*data.statistics[key].stddev/Math.abs(data.statistics[key].mean))+' %':'—'}</td></tr>`).join('');
       el('Export').disabled=false;
       status(`${data.sources.length} ausgewählte Messungen · ${data.activeMeasurementCount} mit positivem Einfluss · ${data.count} gültige Zyklen bei ${data.voltageV} V${data.interpolatedCount?` · ${data.interpolatedCount} Zyklen mit ergänzten Datenlücken`:''}. ${data.count<2?'Für eine Streuungsauswertung sind mindestens zwei Zyklen nötig.':''}`);
       const display=point.expectedH>=8760?{factor:8760,label:'Jahre'}:point.expectedH>=2160?{factor:730,label:'Monate'}:point.expectedH>=336?{factor:168,label:'Wochen'}:{factor:24,label:'Tage'};

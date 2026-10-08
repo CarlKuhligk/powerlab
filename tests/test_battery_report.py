@@ -58,7 +58,7 @@ def test_download_and_pdf_share_the_creation_timestamp_without_browser_chart(tmp
         assert_page_content_fits(document)
 
 
-@pytest.mark.parametrize('case', ['single', 'zero_scatter', 'zero_power', 'duty'])
+@pytest.mark.parametrize('case', ['single', 'zero_scatter', 'zero_power', 'duty', 'period'])
 def test_degenerate_scenarios_remain_printable_without_inventing_uncertainty(case):
     data = deepcopy(summary())
     if case == 'single':
@@ -70,7 +70,7 @@ def test_degenerate_scenarios_remain_printable_without_inventing_uncertainty(cas
     elif case == 'zero_power':
         for phase in data['valid_wake_phases'] + data['valid_sleep_phases']:
             phase['energy_uwh'] = 0
-    request = BatteryReportRequest(energy_wh=1, mode='duty' if case == 'duty' else 'sleep',
+    request = BatteryReportRequest(energy_wh=1, mode='period' if case == 'period' else 'duty' if case == 'duty' else 'sleep',
                                    value=100 if case == 'duty' else 10)
     pdf = render_report({'id': 'edge', 'name': 'Grenzfall'}, data, request, generated_at=CREATED)
     with pymupdf.open(stream=pdf, filetype='pdf') as document:
@@ -83,6 +83,33 @@ def test_degenerate_scenarios_remain_printable_without_inventing_uncertainty(cas
             assert 'Kein Verbrauch im Modell' in first
         elif case == 'zero_scatter':
             assert 'Keine beobachtete Streuung' in first
+        assert_page_content_fits(document)
+
+
+def test_pdf_exports_sleep_current_statistics_and_separate_device_runtime_scatter():
+    from app.battery_report import report_data_many
+    measurements = []
+    for name, current in [('a', 10), ('b', 20)]:
+        data = deepcopy(summary())
+        for w in data['valid_wake_phases']:
+            w.update(duration_s=1, energy_uwh=1)
+        for s in data['valid_sleep_phases']:
+            s['energy_uwh'] = current * data['voltage_v'] * s['duration_s'] / 3600
+        measurements.append({'id': name, 'name': f'Gerät {name}', 'cycle_energy': data})
+    request = BatteryMultiReportRequest(energy_wh=1, mode='period', value=10,
+        sources=[{'measurement_id': m['id']} for m in measurements])
+    result = report_data_many(measurements, request, generated_at=CREATED)
+    row = next(row for row in result['statistics'] if row[0].startswith('Sleep-Strom'))
+    assert row[1:] == ['15,000 µA', '10,000 µA', '20,000 µA', '7,071 µA', '50,000 µA²', '47,140 %']
+    assert result['chart_estimate']['within_log_variance'] == 0
+    assert result['chart_estimate']['between_log_variance'] > 0
+    with pymupdf.open(stream=render_multi_report(measurements, request, generated_at=CREATED), filetype='pdf') as document:
+        text = ' '.join(' '.join(page.get_text().split()) for page in document)
+        for fragment in ['Sleep-Strom', '15,000 µA', '7,071 µA', '50,000 µA²', '47,140 %',
+                         'Laufzeitstreuung zwischen Geräten', 'Periodendauer', 'Wake-Beginn']:
+            assert fragment in text
+        assert 'Sleep-Energie' not in text
+        assert len(document) == 2
         assert_page_content_fits(document)
 
 

@@ -1,4 +1,4 @@
-"""Battery lifetime scenarios from paired observed cycles, without distribution fitting."""
+"""Device sleep means, paired Wake observations and hierarchical runtime uncertainty."""
 import math
 from statistics import mean, variance
 
@@ -59,6 +59,7 @@ def combine(sources, weighting='mean'):
         share = weight / total
         details.append({'id': source['id'], 'name': source.get('name', source['id']),
                         'count': data['count'], 'weight': weight, 'share': share,
+                        'sleep_current_ua': data['sleep_current_ua'],
                         'voltage_v': source['summary']['voltage_v']})
         if share:
             samples.extend(data['samples'])
@@ -71,11 +72,19 @@ def combine(sources, weighting='mean'):
             'sleep_power_uw': sum(d['sleep_power_uw'] * w / total for _, d, w in prepared),
             'statistics': {key: weighted_statistics([s[field] for s in samples], weights)
                            for key, field in [('wake_energy', 'wake_energy_uwh'),
-                                              ('sleep_energy', 'sleep_energy_uwh'),
-                                              ('sleep_power', 'sleep_power_uw')]}}
+                                              ('wake_duration', 'wake_s'),
+                                              ('sleep_energy', 'sleep_energy_uwh')]}
+                          | {'sleep_power': weighted_statistics(
+                              [d['sleep_power_uw'] for _, d, w in prepared if w > 0],
+                              [w / total for _, _, w in prepared if w > 0]),
+                             'sleep_current': weighted_statistics(
+                              [d['sleep_current_ua'] for _, d, w in prepared if w > 0],
+                              [w / total for _, _, w in prepared if w > 0])}}
 
 
 def profile(summary):
+    if not math.isfinite(summary['voltage_v']) or summary['voltage_v'] <= 0:
+        raise ValueError('Positive Messspannung für die Stromberechnung erforderlich.')
     sleeps = {p['following_wake_sequence']: p for p in summary['valid_sleep_phases']}
     samples = []
     for wake in summary['valid_wake_phases']:
@@ -90,45 +99,86 @@ def profile(summary):
                         'sleep_power_uw': sleep['energy_uwh'] * 3600 / sleep['duration_s']})
     if not samples:
         raise ValueError('Diese Messung enthält keinen vollständig gültigen Sleep → Wake → Sleep-Zyklus.')
+    origin = samples[0]['sleep_power_uw']
+    sleep_power = origin + math.fsum((s['sleep_power_uw'] - origin) * s['sleep_s'] for s in samples) / math.fsum(s['sleep_s'] for s in samples)
+    for sample in samples:
+        sample['sleep_power_uw'] = sleep_power
     return {'samples': samples, 'count': len(samples),
             'wake_s': mean(s['wake_s'] for s in samples),
             'wake_energy_uwh': mean(s['wake_energy_uwh'] for s in samples),
-            'sleep_power_uw': sum(s['sleep_energy_uwh'] for s in samples) * 3600 / sum(s['sleep_s'] for s in samples)}
+            'sleep_power_uw': sleep_power, 'sleep_current_ua': sleep_power / summary['voltage_v']}
 
 
 def evaluate(data, energy_wh, mode, value):
     if not math.isfinite(energy_wh) or energy_wh <= 0:
         raise ValueError('Positive nutzbare Batterieenergie erforderlich.')
-    if (mode not in {'sleep', 'duty'} or not math.isfinite(value) or value < 0
+    if (mode not in {'sleep', 'duty', 'period'} or not math.isfinite(value) or value < 0
             or (mode == 'duty' and not 0 < value <= 100)):
-        raise ValueError('Sleep-Dauer mindestens 0; Duty-Cycle über 0 bis 100 %.')
-    sleep_s = value if mode == 'sleep' else data['wake_s'] * (100 / value - 1)
-    power = (data['wake_energy_uwh'] * 3600 + data['sleep_power_uw'] * sleep_s) / (data['wake_s'] + sleep_s)
+        raise ValueError('Sleep-Dauer mindestens 0; Duty-Cycle über 0 bis 100 %; positive Periodendauer.')
+    if mode == 'period' and (value <= 0 or any(s['wake_s'] > value for s in data['samples'])):
+        raise ValueError('Periodendauer muss mindestens so lang wie jede gültige Wake-Phase sein.')
+    sleep_s = (value if mode == 'sleep' else value - data['wake_s'] if mode == 'period'
+               else data['wake_s'] * (100 / value - 1))
+    groups = data.get('groups', [{'data': data, 'share': 1}])
+    def planned_sleep(d):
+        return (value if mode == 'sleep' else value - d['wake_s'] if mode == 'period'
+                else d['wake_s'] * (100 / value - 1))
+    cycle_energy = sum(g['share'] * (g['data']['wake_energy_uwh'] * 3600 +
+                       g['data']['sleep_power_uw'] * planned_sleep(g['data'])) for g in groups)
+    power = cycle_energy / (data['wake_s'] + sleep_s)
     def hours(power_uw):
         return energy_wh * 1e6 / power_uw if power_uw else math.inf
     scenarios = []
     for s in data['samples']:
-        planned = value if mode == 'sleep' else s['wake_s'] * (100 / value - 1)
+        planned = (value if mode == 'sleep' else value - s['wake_s'] if mode == 'period'
+                   else s['wake_s'] * (100 / value - 1))
         scenarios.append(hours((s['wake_energy_uwh'] * 3600 + s['sleep_power_uw'] * planned) / (s['wake_s'] + planned)))
     return {'expected_h': hours(power), 'power_uw': power, 'sleep_s': sleep_s, 'scenarios_h': scenarios,
+            'cycle_energy_uws': cycle_energy,
             'duty_pct': 100 * data['wake_s'] / (data['wake_s'] + sleep_s),
             'percentiles': {str(p): (weighted_percentile(scenarios, data['weights'], p / 100)
                                      if 'weights' in data else percentile(scenarios, p / 100))
                             for p in [0, 5, 10, 50, 90, 95, 100]}}
 
 
-def uncertainty(data, energy_wh, mode, value):
-    """Delta-method uncertainty of log(runtime), stratified by measurement.
+def device_distribution(data, energy_wh, mode, value):
+    """Observed device mean runtimes; not a predictive or confidence interval."""
+    groups = data.get('groups', [{'data': data, 'share': 1}])
+    values = [evaluate(g['data'], energy_wh, mode, value)['expected_h'] for g in groups]
+    result = {'available': False, 'count': len(groups), 'runtimes_h': values,
+              'stddev_h': None, 'variance_h2': None, 'percentiles_h': {}, 'reason': ''}
+    if len(groups) < 2:
+        result['reason'] = 'Mindestens zwei Geräte mit positivem Einfluss für die Gerätestreuung erforderlich.'
+    elif not all(math.isfinite(v) for v in values):
+        result['reason'] = 'Mindestens ein Gerät hat keine endliche Laufzeit im Modell.'
+    else:
+        weights = [g['share'] for g in groups]
+        stats = weighted_statistics(values, weights)
+        if stats['stddev'] is None:
+            result['reason'] = 'Gerätegewichte erlauben keine numerisch stabile Streuungsschätzung.'
+            return result
+        result.update(available=True, stddev_h=stats['stddev'], variance_h2=stats['variance'],
+                      percentiles_h={str(p): weighted_percentile(values, weights, p / 100)
+                                     for p in [5, 50, 95]})
+    return result
 
-    Cycles and measurements are assumed independent; paired sleep/wake
-    covariance and the duration-weighted sleep-power ratio are retained.
-    Battery energy, timing and measurement shares are treated as fixed.
+
+def uncertainty(data, energy_wh, mode, value):
+    """Hierarchical delta-method uncertainty of log(runtime).
+
+    Each measurement is a device. Sleep power is fixed at its duration-weighted
+    mean. Paired Wake energy/duration covariance gives within-device uncertainty.
+    Between-device variance is corrected for that finite-cycle estimation noise,
+    then propagated using squared device shares. This is a random-device model;
+    battery energy, timing and measurement shares are treated as fixed.
     """
     point = evaluate(data, energy_wh, mode, value)
     center = point['expected_h']
     groups = data.get('groups', [{'data': data, 'share': 1}])
     result = {'center_h': center, 'standard_error_h': None, 'log_variance': None,
-              'available': False, 'percentiles_h': {}, 'reason': ''}
+              'available': False, 'percentiles_h': {}, 'reason': '',
+              'within_log_variance': None, 'between_log_variance': None,
+              'device_log_variance': None}
     if not math.isfinite(center):
         result['reason'] = 'Kein mittlerer Verbrauch: keine endliche Laufzeitschätzung.'
         return result
@@ -136,19 +186,35 @@ def uncertainty(data, energy_wh, mode, value):
         result['reason'] = 'Mindestens zwei gültige Zyklen je Messung mit positivem Einfluss erforderlich.'
         return result
     t = point['sleep_s']
-    numerator = 3600 * data['wake_energy_uwh'] + data['sleep_power_uw'] * t
-    gw, gs = -3600 / numerator, -t / numerator
-    gd = (1 / (data['wake_s'] + t) if mode == 'sleep' else
-          1 / data['wake_s'] - data['sleep_power_uw'] * (100 / value - 1) / numerator)
-    log_variance = 0
+    numerator = point['cycle_energy_uws']
+    gw = -3600 / numerator
+    within_variances, device_influences, shares = [], [], []
     for group in groups:
         d = group['data']
-        mean_sleep = mean(s['sleep_s'] for s in d['samples'])
+        gd = (d['sleep_power_uw'] / numerator if mode == 'period' else
+              1 / (data['wake_s'] + t) if mode == 'sleep' else
+              1 / data['wake_s'] - d['sleep_power_uw'] * (100 / value - 1) / numerator)
         influences = [gw * (s['wake_energy_uwh'] - d['wake_energy_uwh']) +
-                      gd * (s['wake_s'] - d['wake_s']) +
-                      gs * (s['sleep_energy_uwh'] * 3600 - d['sleep_power_uw'] * s['sleep_s']) / mean_sleep
+                      gd * (s['wake_s'] - d['wake_s'])
                       for s in d['samples']]
-        log_variance += group['share']**2 * variance(influences) / d['count']
+        within_variances.append(variance(influences) / d['count'])
+        shares.append(group['share'])
+        device_point = evaluate(d, energy_wh, mode, value)
+        device_influences.append(-(device_point['cycle_energy_uws'] - numerator) / numerator +
+                                 (d['wake_s'] + device_point['sleep_s'] - data['wake_s'] - t) /
+                                 (data['wake_s'] + t))
+    squared_shares = sum(w * w for w in shares)
+    if len(groups) > 1 and 1 - squared_shares <= 1e-15:
+        result['reason'] = 'Gerätegewichte erlauben keine numerisch stabile Streuungsschätzung.'
+        return result
+    within = sum(w * w * v for w, v in zip(shares, within_variances))
+    device_variance = None
+    if len(groups) > 1:
+        observed = weighted_statistics(device_influences, shares)['variance']
+        noise = sum(w * (1 - w) * v for w, v in zip(shares, within_variances)) / (1 - squared_shares)
+        device_variance = max(0, observed - noise)
+    between = (device_variance or 0) * squared_shares
+    log_variance = within + between
     sigma = math.sqrt(max(0, log_variance))
     z = {5: -1.6448536269514722, 10: -1.2815515655446004, 50: 0,
          90: 1.2815515655446004, 95: 1.6448536269514722}
@@ -161,7 +227,9 @@ def uncertainty(data, energy_wh, mode, value):
         result['reason'] = 'Unsicherheit zu groß für eine endliche Näherung.'
         return result
     result.update(available=True, standard_error_h=center * sigma,
-                  log_variance=log_variance, percentiles_h=percentiles)
+                  log_variance=log_variance, percentiles_h=percentiles,
+                  within_log_variance=within, between_log_variance=between,
+                  device_log_variance=device_variance)
     return result
 
 
@@ -179,9 +247,9 @@ def normal_approximation(data, energy_wh, mode, value):
 
 def measured_statistics(summary):
     data = profile(summary)
-    values = [s['sleep_power_uw'] for s in data['samples']]
     return {'sleep_energy': summary['sleep_variability']['energy_uwh'],
             'wake_energy': summary['wake_variability']['energy_uwh'],
-            'sleep_power': {'mean': mean(values), 'variance': variance(values) if len(values) > 1 else None,
-                            'stddev': math.sqrt(variance(values)) if len(values) > 1 else None,
-                            'min': min(values), 'max': max(values)}}
+            'wake_duration': weighted_statistics([s['wake_s'] for s in data['samples']],
+                                                [1 / data['count']] * data['count']),
+            'sleep_current': weighted_statistics([data['sleep_current_ua']], [1]),
+            'sleep_power': weighted_statistics([data['sleep_power_uw']], [1])}

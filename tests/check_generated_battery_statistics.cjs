@@ -15,7 +15,7 @@ for(const c of cases){
   const data=context.model.combine(c.sources,c.weighting),e=c.expected;
   for(const [a,b] of [['count','count'],['wakeS','wake_s'],['wakeEnergyUwh','wake_energy_uwh'],['sleepPowerUw','sleep_power_uw']])close(data[a],e[b],`${c.name}.${a}`);
   close(data.sources.map(s=>s.share),e.shares,`${c.name}.shares`);
-  for(const [a,b] of [['wakeEnergy','wake_energy'],['sleepEnergy','sleep_energy'],['sleepPower','sleep_power']])close(data.statistics[a],e.statistics[b],`${c.name}.${a}`);
+  for(const [a,b] of [['wakeEnergy','wake_energy'],['wakeDuration','wake_duration'],['sleepEnergy','sleep_energy'],['sleepPower','sleep_power'],['sleepCurrent','sleep_current']])close(data.statistics[a],e.statistics[b],`${c.name}.${a}`);
   const d=context.model.distribution(data,c.energy_wh,c.mode,c.value),p=d.point;
   for(const [a,b] of [['expectedH','expected_h'],['powerUw','power_uw'],['sleepS','sleep_s'],['dutyPct','duty_pct'],['scenariosH','scenarios_h']])close(p[a],e[b],`${c.name}.${a}`);
   for(const [a,b] of [['minH','0'],['p05H','5'],['lowH','10'],['medianH','50'],['highH','90'],['p95H','95'],['maxH','100']])close(p[a],e.percentiles[b],`${c.name}.${a}`);
