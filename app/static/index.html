@@ -225,7 +225,9 @@
     <fieldset class="measurement-basics"><legend><span class="section-number" aria-hidden="true">1</span> Messung &amp; Gerät</legend><div class="form-grid">
       <label class="wide">Name<input name="name" id="measurementName" maxlength="160" required value="ULP Sleep / Wake Test"></label>
       <label>Projekt<input name="project" value="ULP Application"></label><label>Gerät<input name="device" value="Prototype #1"></label>
-      <label>Firmware<input name="firmware" value="dev"></label>
+      <label>Seriennummer (optional)<input name="serial_number" maxlength="160" placeholder="z. B. SN-00123"></label>
+      <label>Firmware-Version (optional)<input name="firmware" maxlength="160" placeholder="z. B. v1.2.3"></label>
+      <label>Hardware-Version (optional)<input name="hardware_version" maxlength="160" placeholder="z. B. Rev. B"></label>
     </div><div class="form-grid hardware-settings">
       <label>PPK2 auswählen<select name="port" id="portSelect" required></select></label>
       <label>Modus<select name="meter_mode"><option value="source">Source meter</option><option value="ampere">Ampere meter</option></select></label>
@@ -362,7 +364,7 @@
   </form>
 </dialog>
 
-<dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATEN</span><h2 id="editDialogTitle">Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit aria-label="Dialog schließen">×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Gerät<input name="device"></label><label>Firmware<input name="firmware"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
+<dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATEN</span><h2 id="editDialogTitle">Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit aria-label="Dialog schließen">×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Gerät<input name="device"></label><label>Seriennummer (optional)<input name="serial_number" maxlength="160"></label><label>Firmware-Version (optional)<input name="firmware" maxlength="160"></label><label>Hardware-Version (optional)<input name="hardware_version" maxlength="160"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="currentChartTooltip" class="current-chart-tooltip hidden" role="tooltip"></div>
 <script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>

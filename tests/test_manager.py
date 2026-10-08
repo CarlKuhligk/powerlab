@@ -72,6 +72,9 @@ def test_ppk2_identity_and_config_are_logged(tmp_path: Path, monkeypatch, mode):
 
     req = MeasurementStartRequest(
         name="hardware-log-test",
+        serial_number="0000123",
+        firmware="v1.2.3",
+        hardware_version="Rev. B",
         detection_mode=mode,
         port="COM4",
         sleep_min_s=.005,
@@ -97,6 +100,9 @@ def test_ppk2_identity_and_config_are_logged(tmp_path: Path, monkeypatch, mode):
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["ppk2_id"] == "PPK2-TEST-001"
     assert payload["ppk2_config"]["serial"] == "TESTSERIAL"
+    assert payload["serial_number"] == "0000123"
+    assert payload["firmware"] == "v1.2.3"
+    assert payload["hardware_version"] == "Rev. B"
     assert finished["settings"]["wake_min_ms"] == 3
     assert finished["settings"]["sleep_min_s"] == .005
     assert finished["settings"]["sleep_threshold_ua"] == 5

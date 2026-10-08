@@ -198,6 +198,13 @@ Ein PPK2 kann nicht gleichzeitig von zwei laufenden Messungen verwendet werden. 
 
 ## PPK2-Messlog
 
+Beim Anlegen einer Messung können Seriennummer, Firmware-Version und
+Hardware-Version des Prüflings optional angegeben werden. Die Felder starten
+leer, lassen sich auch später bearbeiten und erscheinen in den Messungsdetails,
+im PDF-Messprotokoll sowie in JSON- und Bundle-Metadaten. Die Seriennummer des
+Prüflings wird unabhängig von der automatisch erfassten PPK2-USB-Seriennummer
+gespeichert.
+
 Jede Session speichert unter anderem:
 
 - PPK2-ID

@@ -32,7 +32,9 @@ class Measurement(Base):
     name: Mapped[str] = mapped_column(String(160), index=True)
     project: Mapped[str] = mapped_column(String(160), default="", index=True)
     device: Mapped[str] = mapped_column(String(160), default="", index=True)
+    serial_number: Mapped[str] = mapped_column(String(160), default="", server_default="")
     firmware: Mapped[str] = mapped_column(String(160), default="", index=True)
+    hardware_version: Mapped[str] = mapped_column(String(160), default="", server_default="")
     notes: Mapped[str] = mapped_column(Text, default="")
 
     driver: Mapped[str] = mapped_column(String(32), default="ppk2")
@@ -175,6 +177,8 @@ class Database:
             if "ppk2_config_json" not in columns:
                 conn.execute(text("ALTER TABLE measurements ADD COLUMN ppk2_config_json TEXT DEFAULT '{}'") )
             additions = {
+                "serial_number": "VARCHAR(160) NOT NULL DEFAULT ''",
+                "hardware_version": "VARCHAR(160) NOT NULL DEFAULT ''",
                 "scheduled_start_at": "DATETIME",
                 "scheduled_end_at": "DATETIME",
                 "requested_duration_s": "FLOAT",

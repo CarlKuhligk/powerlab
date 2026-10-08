@@ -316,6 +316,7 @@ class MeasurementManager:
         with self.db.session() as s:
             s.add(Measurement(
                 id=measurement_id, name=req.name, project=req.project, device=req.device, firmware=req.firmware, notes=req.notes,
+                serial_number=req.serial_number, hardware_version=req.hardware_version,
                 driver="ppk2", port=req.port, meter_mode=req.meter_mode, voltage_mv=req.voltage_mv, sample_rate_hz=self.settings.sample_rate_hz,
                 status=status, scheduled_start_at=start_at if req.start_mode == "scheduled" else None, scheduled_end_at=end_at,
                 requested_duration_s=req.duration_s if req.stop_mode == "duration" else None, start_mode=req.start_mode, stop_mode=req.stop_mode,
@@ -364,6 +365,7 @@ class MeasurementManager:
             if m.status != "scheduled":
                 raise RuntimeError("Only pending scheduled measurements can be changed")
             m.name=req.name; m.project=req.project; m.device=req.device; m.firmware=req.firmware; m.notes=req.notes
+            m.serial_number=req.serial_number; m.hardware_version=req.hardware_version
             m.port=req.port; m.meter_mode=req.meter_mode; m.voltage_mv=req.voltage_mv
             m.scheduled_start_at=start_at; m.scheduled_end_at=end_at; m.requested_duration_s=req.duration_s if req.stop_mode == "duration" else None
             m.start_mode=req.start_mode; m.stop_mode=req.stop_mode; m.settings_json=json.dumps(req.model_dump(mode="json"))
@@ -1016,7 +1018,9 @@ class MeasurementManager:
             "name": m.name,
             "project": m.project,
             "device": m.device,
+            "serial_number": m.serial_number,
             "firmware": m.firmware,
+            "hardware_version": m.hardware_version,
             "notes": m.notes,
             "driver": m.driver,
             "port": m.port,

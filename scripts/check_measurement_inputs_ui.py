@@ -13,6 +13,8 @@ def main():
         browser = playwright.chromium.launch(channel="msedge", headless=True)
         page = browser.new_page(locale="de-DE")
         errors = []
+        saved = {}
+        writes = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.route_web_socket("**/ws/devices", lambda ws: ws.send(json.dumps({"ppk2": [{"port": "MOCK", "device_id": "TEST"}]})))
         page.route_web_socket("**/ws/live", lambda ws: ws.send(json.dumps({"running": [], "scheduled": []})))
@@ -26,7 +28,21 @@ def main():
             elif path == "/api/system":
                 request.fulfill(json={"sample_rate_hz": 100000, "sample_period_us": 10, "data_dir": "data"})
             elif path == "/api/measurements":
-                request.fulfill(json=[])
+                if request.request.method == "POST":
+                    payload = request.request.post_data_json
+                    writes.append(payload)
+                    saved.update(payload, id="metadata-ui", status="scheduled", settings=payload,
+                                 sample_rate_hz=100000)
+                    request.fulfill(json=saved)
+                else:
+                    request.fulfill(json=[])
+            elif path == "/api/measurements/metadata-ui/scheduled":
+                payload = request.request.post_data_json
+                writes.append(payload)
+                saved.update(payload, settings=payload)
+                request.fulfill(json=saved)
+            elif path == "/api/measurements/metadata-ui":
+                request.fulfill(json=saved)
             elif path == "/api/live":
                 request.fulfill(json={"running": [], "scheduled": []})
             else:
@@ -39,9 +55,13 @@ def main():
             for _ in range(2):
                 page.locator("#newMeasurementBtn").click()
                 page.wait_for_selector("#measurementDialog[open]")
+                for name in ["serial_number", "firmware", "hardware_version"]:
+                    field = page.locator(f"#measurementForm [name='{name}']")
+                    assert field.input_value() == "", name
+                    assert not field.evaluate("el=>el.required"), name
                 for selector in ["#startAtLabel", "#durationLabel", "#endAtLabel", "#eventCountLabel"]:
                     assert not page.locator(selector).is_visible(), f"Inactive field visible: {selector}"
-                for name in ["name", "project", "device", "firmware", "notes"]:
+                for name in ["name", "project", "device", "serial_number", "firmware", "hardware_version", "notes"]:
                     field = page.locator(f"#measurementForm [name='{name}']")
                     field.fill("")
                     field.click()
@@ -74,9 +94,30 @@ def main():
                         if selector != f"#{field_id}":
                             assert not page.locator(selector).is_visible(), (mode, selector)
                 page.locator("#measurementForm .dialog-actions [data-close-dialog]").click()
+            # Submit through the real form and restore the fields when editing a plan.
+            page.locator("#newMeasurementBtn").click()
+            values = {"serial_number": "0000123", "firmware": "v1.2.3", "hardware_version": "Rev. B"}
+            for name, value in values.items():
+                page.locator(f"#measurementForm [name='{name}']").fill(value)
+            page.locator("#startMode").select_option("scheduled")
+            page.locator("#scheduledStartAt").fill("2027-01-01T12:00")
+            page.locator("#measurementSubmit").click()
+            page.wait_for_selector("#measurementDialog", state="hidden")
+            page.wait_for_selector("#sessionView:not(.hidden)")
+            assert all(writes[-1][key] == value for key, value in values.items())
+            assert "SN: 0000123" in page.locator("#sessionMeta").inner_text()
+            page.locator("#editScheduledBtn").click()
+            for name, value in values.items():
+                assert page.locator(f"#measurementForm [name='{name}']").input_value() == value
+            page.locator("#measurementForm [name='hardware_version']").fill("Rev. C")
+            page.locator("#measurementSubmit").click()
+            page.wait_for_selector("#measurementDialog", state="hidden")
+            assert writes[-1]["hardware_version"] == "Rev. C"
+            assert writes[-1]["serial_number"] == values["serial_number"]
+            assert writes[-1]["firmware"] == values["firmware"]
         assert not errors, errors
         browser.close()
-    print("Measurement inputs, focus during device/live updates, scheduling visibility and reopening passed on desktop and mobile.")
+    print("Measurement inputs, optional device metadata submission/restoration, focus during device/live updates, scheduling visibility and reopening passed on desktop and mobile.")
 
 
 if __name__ == "__main__":

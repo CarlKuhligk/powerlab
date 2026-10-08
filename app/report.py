@@ -71,7 +71,8 @@ def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berl
         "notes": m.get("notes") or "Keine Notizen hinterlegt.",
         "error": m.get("error") or "",
         "context": [[label, str(m.get(key) or "—")] for label, key in [
-            ("Projekt", "project"), ("Prüfling", "device"), ("Firmware", "firmware")]] + [
+            ("Projekt", "project"), ("Prüfling", "device"), ("Seriennummer", "serial_number"),
+            ("Firmware-Version", "firmware"), ("Hardware-Version", "hardware_version")]] + [
             ["Beginn", date(m.get("started_at"), timezone_name)],
             ["Ende", date(m.get("finished_at"), timezone_name)],
             ["Messdauer (Zeitstempel)", number(m.get("duration_s"), "s")],

@@ -53,7 +53,9 @@ class MeasurementStartRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     project: str = Field(default="", max_length=160)
     device: str = Field(default="", max_length=160)
+    serial_number: str = Field(default="", max_length=160)
     firmware: str = Field(default="", max_length=160)
+    hardware_version: str = Field(default="", max_length=160)
     notes: str = Field(default="", max_length=4000)
 
     port: str | None = None
@@ -117,5 +119,7 @@ class MeasurementPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     project: str | None = Field(default=None, max_length=160)
     device: str | None = Field(default=None, max_length=160)
+    serial_number: str | None = Field(default=None, max_length=160)
     firmware: str | None = Field(default=None, max_length=160)
+    hardware_version: str | None = Field(default=None, max_length=160)
     notes: str | None = Field(default=None, max_length=4000)

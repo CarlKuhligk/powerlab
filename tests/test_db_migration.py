@@ -27,3 +27,16 @@ def test_old_events_keep_wake_classification_after_additive_migration(tmp_path):
     db.create_all()  # migration is idempotent
     with db.engine.begin() as conn:
         assert conn.execute(text("SELECT sequence, event_kind FROM wake_events WHERE id=1")).one() == (7, "wake")
+
+
+def test_existing_measurement_keeps_firmware_when_optional_device_fields_are_added(tmp_path):
+    db = Database(f"sqlite:///{tmp_path / 'metadata.db'}")
+    with db.engine.begin() as conn:
+        conn.execute(text("CREATE TABLE measurements (id VARCHAR(36) PRIMARY KEY, name VARCHAR(160), firmware VARCHAR(160))"))
+        conn.execute(text("INSERT INTO measurements VALUES ('legacy', 'Original', 'v0.9')"))
+    db.create_all()
+    db.create_all()
+    with db.engine.begin() as conn:
+        assert conn.execute(text(
+            "SELECT id, name, firmware, serial_number, hardware_version FROM measurements"
+        )).one() == ('legacy', 'Original', 'v0.9', '', '')
