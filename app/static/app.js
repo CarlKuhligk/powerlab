@@ -18,6 +18,7 @@ const state = {
 };
 const $ = id => document.getElementById(id);
 const plotConfig = {responsive:true,displaylogo:false,scrollZoom:true,modeBarButtonsToRemove:['sendDataToCloud']};
+const historyPlotConfig = {...plotConfig,displayModeBar:true};
 
 async function api(url, options={}) {
   const res = await fetch(url,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
@@ -815,7 +816,7 @@ function renderOverviewChart(overview,{force=false}={}){
     const el=$('historyOverviewChart');
     bindOverviewScrollZoom(el);
     el.removeAllListeners?.('plotly_click');
-    await Plotly.react(el,traces,layout,plotConfig);
+    await Plotly.react(el,traces,layout,historyPlotConfig);
     if(renderToken!==state.historyRenderToken||state.historyMode!=='overview')return;
     el.removeAllListeners?.('plotly_click');
     el.on('plotly_click',ev=>{
@@ -1038,7 +1039,7 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
     const el=$('wakeEventChart');
     hideCurrentTooltip();el.classList.remove('hidden');
     ++state.eventPlotPending;
-    try{await Plotly.react(el,traces,layout,plotConfig)}finally{--state.eventPlotPending;}
+    try{await Plotly.react(el,traces,layout,historyPlotConfig)}finally{--state.eventPlotPending;}
     if(renderToken!==state.historyRenderToken||state.historyMode!=='event')return;
     $('wakeEventStatus').className='event-loading hidden';$('wakeEventStatus').textContent='';
     bindEventChartInteractions(d,unit);

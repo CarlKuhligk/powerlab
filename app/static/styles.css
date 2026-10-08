@@ -443,11 +443,18 @@ input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator{opacity
 .detail-state-legend span{display:flex;align-items:center;gap:6px}
 .detail-state-legend span::before{content:'';width:7px;height:7px;background:var(--detail-accent);border-radius:50%}
 #historyOverviewChart{height:260px}
-.event-chart-container{position:relative;height:360px}
+/* Reserve a separate toolbar row so Plotly controls never cover event markers. */
+.chart-toolbar-container{--chart-toolbar-height:40px;position:relative;padding-top:var(--chart-toolbar-height);overflow-x:clip}
+.chart-toolbar-container .chart{overflow:visible}
+.chart-toolbar-container .plotly .modebar-container{width:100%;height:var(--chart-toolbar-height);transform:translateY(calc(-1 * var(--chart-toolbar-height)));display:flex;align-items:center;justify-content:flex-end}
+.chart-toolbar-container .plotly .modebar{position:static;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 0;white-space:normal;max-width:100%}
+.chart-toolbar-container .plotly .modebar-group{float:none;display:flex}
+.chart-toolbar-container .plotly .modebar-btn{width:32px;height:32px;min-height:32px}
+.event-chart-container{height:calc(360px + var(--chart-toolbar-height))}
 #wakeEventChart{height:100%}
-#wakeEventStatus{position:absolute;inset:0;z-index:2;height:auto;min-height:0;pointer-events:none}
-#wakeEventStatus.event-refreshing{inset:8px 8px auto auto;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel2);font-size:12px}
-@media(max-width:600px){.event-chart-container{height:480px}#wakeEventChart .scatterlayer .text{display:none}}
+#wakeEventStatus{position:absolute;inset:var(--chart-toolbar-height) 0 0;z-index:2;height:auto;min-height:0;pointer-events:none}
+#wakeEventStatus.event-refreshing{inset:calc(var(--chart-toolbar-height) + 8px) 8px auto auto;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel2);font-size:12px}
+@media(max-width:600px){.chart-toolbar-container{--chart-toolbar-height:80px}.event-chart-container{height:calc(480px + var(--chart-toolbar-height))}#wakeEventChart .scatterlayer .text{display:none}}
 #detailView .event-display-help{position:relative;vertical-align:middle;margin-left:4px}
 #detailView .event-display-help .info-button{color:#acbdd0;border-color:#475768}
 #detailView .event-display-help .field-tooltip{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:300px;max-width:calc(100vw - 48px);font-size:12px;line-height:1.6}
