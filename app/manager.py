@@ -1695,7 +1695,8 @@ class MeasurementManager:
         measurement = self.get_measurement(measurement_id)
         if measurement["status"] not in {"completed", "failed", "no_sleep", "cancelled"}:
             raise RuntimeError("PDF-Messprotokolle sind erst nach Ende der Messung verfügbar.")
-        return f"measurement_{measurement_id}_report.pdf", render_report(measurement, self.overview(measurement_id))
+        return f"measurement_{measurement_id}_report.pdf", render_report(
+            measurement, self.overview(measurement_id), timezone_name=self.settings.timezone)
 
     def export_metadata_json(self, measurement_id: str) -> tuple[str, bytes]:
         payload = self.get_measurement(measurement_id)

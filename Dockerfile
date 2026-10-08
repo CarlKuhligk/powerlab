@@ -4,6 +4,7 @@ ARG POWERLAB_VERSION=dev
 LABEL org.opencontainers.image.version="${POWERLAB_VERSION}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
+    TZ=Europe/Berlin \
     POWERLAB_VERSION=${POWERLAB_VERSION} \
     PYTHONUNBUFFERED=1 \
     POWERLAB_HOST=0.0.0.0 \
@@ -12,6 +13,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POWERLAB_DATABASE_URL=sqlite:////data/powerlab.db
 
 WORKDIR /app
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

@@ -64,7 +64,8 @@ bei Mittelwert null bleibt sie leer.
   columns: (1fr, 1fr, 1fr, 1fr, 0.8fr))
 = Datenqualität
 #rows-table(report.quality)
-Alle absoluten Zeitangaben sind in UTC. Ereignis- und Markerzeiten sind relativ zum
+Alle absoluten Zeitangaben verwenden #report.timezone mit dem jeweils gültigen
+UTC-Abstand (Sommer-/Winterzeit). Ereignis- und Markerzeiten sind relativ zum
 Messbeginn. Rohdaten und Darstellungsfilter werden durch den Export nicht verändert.
 = Ereignisübersicht
 #if report.events.len() == 0 { [Keine Ereignisse gespeichert.] } else {

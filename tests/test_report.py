@@ -1,21 +1,27 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import pymupdf
+from pydantic import ValidationError
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.db import Measurement, Marker, WakeEvent
 from app.main import create_app
-from app.report import number, report_data
+from app.report import date, number, report_data
 
 
 @pytest.mark.parametrize("charge_uc,charge_text,energy_text", [
     (400, "400,000 µC", "366,666667 nWh"),
     (1_200_000_000, "1,200 kC", "1,100000 Wh"),
 ])
+@pytest.mark.parametrize("timezone_name,expected_start", [
+    ("Europe/Berlin", "06.10.2026 10:00:00 CEST (UTC+02:00)"),
+    ("UTC", "06.10.2026 08:00:00 UTC (UTC+00:00)"),
+])
 def test_pdf_download_uses_history_values_and_treats_user_text_as_data(
-        tmp_path, charge_uc, charge_text, energy_text):
-    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{tmp_path / 'test.db'}")
+        tmp_path, charge_uc, charge_text, energy_text, timezone_name, expected_start):
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{tmp_path / 'test.db'}", timezone=timezone_name)
     with TestClient(create_app(settings)) as client:
         manager = client.app.state.manager
         start = datetime(2026, 10, 6, 8, 0, tzinfo=timezone.utc)
@@ -44,7 +50,43 @@ def test_pdf_download_uses_history_values_and_treats_user_text_as_data(
         assert response.headers["content-type"] == "application/pdf"
         assert 'filename="measurement_report_report.pdf"' in response.headers["content-disposition"]
         assert response.content.startswith(b"%PDF-")
+        with pymupdf.open(stream=response.content, filetype="pdf") as document:
+            text = " ".join(page.get_text() for page in document)
+            assert expected_start in text
+            assert timezone_name in text
+        assert m["started_at"] == "2026-10-06T08:00:00Z"
         assert client.get("/api/measurements/missing/export/pdf").status_code == 404
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("2026-10-08T13:14:15Z", "08.10.2026 15:14:15 CEST (UTC+02:00)"),
+    ("2026-01-08T13:14:15Z", "08.01.2026 14:14:15 CET (UTC+01:00)"),
+    ("2026-10-08T13:14:15", "08.10.2026 15:14:15 CEST (UTC+02:00)"),
+    ("2026-10-08T15:14:15+02:00", "08.10.2026 15:14:15 CEST (UTC+02:00)"),
+    ("2026-03-29T00:59:59Z", "29.03.2026 01:59:59 CET (UTC+01:00)"),
+    ("2026-03-29T01:00:00Z", "29.03.2026 03:00:00 CEST (UTC+02:00)"),
+    ("2026-10-25T00:30:00Z", "25.10.2026 02:30:00 CEST (UTC+02:00)"),
+    ("2026-10-25T01:30:00Z", "25.10.2026 02:30:00 CET (UTC+01:00)"),
+    (None, "—"),
+])
+def test_report_dates_follow_berlin_dst_and_disambiguate_repeated_hour(value, expected):
+    assert date(value) == expected
+
+
+def test_timezone_setting_reads_environment_and_rejects_invalid_zone(monkeypatch):
+    monkeypatch.setenv("TZ", "Europe/London")
+    assert Settings(_env_file=None).timezone == "Europe/London"
+    with pytest.raises(ValidationError, match="Unknown IANA timezone"):
+        Settings(_env_file=None, timezone="Invalid/Timezone")
+
+
+def test_timezone_setting_reads_dotenv_and_environment_takes_precedence(tmp_path, monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("TZ=Europe/Berlin\n", encoding="utf-8")
+    assert Settings(_env_file=env_file).timezone == "Europe/Berlin"
+    monkeypatch.setenv("TZ", "UTC")
+    assert Settings(_env_file=env_file).timezone == "UTC"
 
 
 @pytest.mark.parametrize("value,unit,expected", [

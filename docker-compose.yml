@@ -11,6 +11,7 @@ services:
     ports:
       - "8889:8889"
     environment:
+      TZ: ${TZ:-Europe/Berlin}
       POWERLAB_HOST: 0.0.0.0
       POWERLAB_PORT: 8889
       POWERLAB_DATA_DIR: /data

@@ -43,7 +43,7 @@ Die Mittelwertunsicherheit enthält getrennte Beiträge: Wake-Schätzunsicherhei
 
 Das Modell setzt unabhängige, repräsentative Wakes und unabhängige Geräte unter vergleichbaren Bedingungen voraus. Sleep-Messungen müssen genügend Peak-Perioden für einen repräsentativen Mittelwert enthalten. Mindestens zwei gültige Zyklen je aktivem Gerät sind für die Mittelwertunsicherheit nötig; mindestens zwei aktive Geräte für Gerätestreuung. Mit einem Gerät gilt das Unsicherheitsintervall nur für dieses Gerät. Bei wenigen Geräten oder großer relativer Unsicherheit ist die Delta-/Lognormal-Näherung eingeschränkt; das 90-%-Intervall ist keine garantierte Prognose. Zeitliche Abhängigkeiten, unsichere Messungsanteile, systematische Messfehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen sind nicht enthalten. In der Tabelle beschreiben Wake-Varianzen Einzelzyklen und Sleep-Varianzen Gerätemittelwerte. Grundlage: [NIST TN 1297, Unsicherheitsfortpflanzung mit Kovarianzen](https://www.nist.gov/pml/nist-technical-note-1297/nist-tn-1297-appendix-law-propagation-uncertainty).
 
-**PDF-Bericht herunterladen** erstellt ein druckfertiges Laufzeitprotokoll. Die erste A4-Seite zeigt Laufzeit, näherungsweises 90-%-Intervall, mittlere Leistung, Batterie- und Timing-Einstellungen sowie ein weißes Vektordiagramm. Messgrundlage, Gerätegewichte, Sleep-Strom je Gerät sowie Tabellen zu Wake-Dauer, Wake-Energie, Sleep-Strom und Sleep-Leistung folgen auf der zweiten Seite. Sleep-Mittelwert, Minimum, Maximum, Standardabweichung, Varianz und relative Streuung beziehen sich auf die Gerätemittelwerte; Sleep-Energie wird nicht als Vergleichsgröße ausgegeben. Gerätestreuung der Laufzeiten und Mittelwertunsicherheit sind getrennt dokumentiert. Umfangreiche Messungslisten erhalten weitere Seiten. Diagramm und Zahlen werden gemeinsam serverseitig aus den gespeicherten Messungen berechnet (Matplotlib und Typst). Der UTC-Erstellungszeitpunkt steht auf jeder Seite und im Dateinamen, beispielsweise `battery_life_combined_2026-10-07_13-14-15_123456Z.pdf`. Ausführliche Erläuterungen sind im Tool über aufklappbare Hilfen erreichbar, insbesondere „Berechnung und Annahmen“. API: `POST /api/battery-report`, Modi `period`, `sleep` und `duty`; der Einzelmessungs-Export unter `POST /api/measurements/{id}/battery-report` bleibt verfügbar. Ein Browser-PNG ist nicht mehr erforderlich; bestehende Clients dürfen es weiterhin mitsenden, es wird validiert und durch das berechnete Druckdiagramm ersetzt.
+**PDF-Bericht herunterladen** erstellt ein druckfertiges Laufzeitprotokoll. Die erste A4-Seite zeigt Laufzeit, näherungsweises 90-%-Intervall, mittlere Leistung, Batterie- und Timing-Einstellungen sowie ein weißes Vektordiagramm. Messgrundlage, Gerätegewichte, Sleep-Strom je Gerät sowie Tabellen zu Wake-Dauer, Wake-Energie, Sleep-Strom und Sleep-Leistung folgen auf der zweiten Seite. Sleep-Mittelwert, Minimum, Maximum, Standardabweichung, Varianz und relative Streuung beziehen sich auf die Gerätemittelwerte; Sleep-Energie wird nicht als Vergleichsgröße ausgegeben. Gerätestreuung der Laufzeiten und Mittelwertunsicherheit sind getrennt dokumentiert. Umfangreiche Messungslisten erhalten weitere Seiten. Diagramm und Zahlen werden gemeinsam serverseitig aus den gespeicherten Messungen berechnet (Matplotlib und Typst). Der Erstellungszeitpunkt steht auf jeder Seite in der über `TZ` konfigurierten Zeitzone (Standard: `Europe/Berlin`), einschließlich UTC-Abstand. Im Dateinamen bleibt derselbe Zeitpunkt in UTC (`Z`), beispielsweise `battery_life_combined_2026-10-07_13-14-15_123456Z.pdf`. Ausführliche Erläuterungen sind im Tool über aufklappbare Hilfen erreichbar, insbesondere „Berechnung und Annahmen“. API: `POST /api/battery-report`, Modi `period`, `sleep` und `duty`; der Einzelmessungs-Export unter `POST /api/measurements/{id}/battery-report` bleibt verfügbar. Ein Browser-PNG ist nicht mehr erforderlich; bestehende Clients dürfen es weiterhin mitsenden, es wird validiert und durch das berechnete Druckdiagramm ersetzt.
 
 Ein eigener Bereich **Sleep-Auswertung** in den Messungsdetails und im PDF-Messprotokoll zeigt erfasste Sleep-Zeit, Strom, Ladung und Energie einschließlich zugeordneter Hintergrundereignisse. Diese Kennwerte berücksichtigen gespeicherte Sleep-Daten auch ohne vollständigen Wake-Zyklus und ergänzen keine Datenlücken. Eine separate Tabelle zeigt die Sleep-Phasen aus gültigen Zyklen samt Kennzeichnung ergänzter Datenlücken. Gespeicherte Sleep-Abschnitte sind Speicher-Checkpoints und werden nicht als eigene Phasen gezählt. JSON-Exporte und Bundle-Metadaten enthalten denselben Bereich unter `sleep_analysis`. Das PDF enthält außerdem die Varianz, Standardabweichung und relative Streuung der gültigen Wake-Zustände.
 
@@ -149,7 +149,8 @@ ein einheitliches A4-Protokoll herunter. Für mehrere Messungen steht unter
 
 Das Protokoll enthält Messkontext und Notizen, Messaufbau und Erkennungsschwellen,
 Kennwerte der History-Auswertung, Datenqualität, Ereignisse, Marker sowie den
-PPK2-Geräte- und Kalibrier-Snapshot. Zeitangaben sind ausdrücklich in UTC;
+PPK2-Geräte- und Kalibrier-Snapshot. Absolute Zeitangaben verwenden standardmäßig
+`Europe/Berlin`, einschließlich automatischer Sommer-/Winterzeit und UTC-Abstand;
 Ereignisse und Marker werden relativ zum Messbeginn angegeben. Fehlgeschlagene
 Messungen sind als unvollständig gekennzeichnet. Laufende und geplante Messungen
 können erst nach ihrem Ende als PDF exportiert werden.
@@ -235,6 +236,17 @@ docker compose up -d --build
 Mit Podman lautet der entsprechende Befehl `podman compose up -d --build`.
 Die Weboberfläche ist unter http://localhost:8889 erreichbar, die API-Dokumentation
 unter http://localhost:8889/docs. PowerLab hört im Container auf `0.0.0.0:8889`.
+
+Container und PDF-Berichte verwenden standardmäßig `Europe/Berlin`: im Winter
+MEZ/CET (UTC+01:00), im Sommer MESZ/CEST (UTC+02:00). Über
+`TZ=Europe/Berlin` in `.env` lässt sich eine andere IANA-Zeitzone
+einstellen; Compose übergibt `TZ` an das Betriebssystem und die Anwendung.
+Die PDF-Anzeige wird ausdrücklich
+umgerechnet und hängt dadurch nicht von der Host-Zeitzone ab. Datenbank,
+API-Zeitstempel und Zeitstempel im Batterie-PDF-Dateinamen bleiben in UTC (`Z`).
+Zum Übernehmen der Änderungen `docker compose up -d --build` ausführen und
+die PDFs neu exportieren. Die Containerzeit lässt sich mit
+`docker compose exec powerlab date '+%Y-%m-%d %H:%M:%S %Z %z'` prüfen.
 
 Die Compose-Datei speichert SQLite, Messungen und Exporte im Volume `powerlab_data`.
 Vorhandene Dateien aus dem lokalen Ordner `data` werden nicht automatisch übernommen.

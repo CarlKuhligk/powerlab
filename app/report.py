@@ -5,6 +5,7 @@ import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 TEMPLATE = Path(__file__).parent / "templates" / "measurement.typ"
@@ -42,16 +43,20 @@ def number(value, unit="", digits=3):
     return f"{value:,.{digits}f}".replace(",", " ").replace(".", ",") + (f" {unit}" if unit else "")
 
 
-def date(value):
+def date(value, timezone_name="Europe/Berlin", *, microseconds=False):
     if not value:
         return "—"
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M:%S UTC")
+    local = parsed.astimezone(ZoneInfo(timezone_name))
+    offset = local.strftime("%z")
+    offset = offset[:3] + ":" + offset[3:]
+    timestamp = local.strftime("%d.%m.%Y %H:%M:%S" + (".%f" if microseconds else ""))
+    return f"{timestamp} {local.tzname()} (UTC{offset})"
 
 
-def report_data(measurement: dict, overview: dict) -> dict:
+def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berlin") -> dict:
     m, a = measurement, overview["analysis"]
     settings, ppk = m.get("settings", {}), m.get("ppk2_config", {})
     sleep = a.get("average_sleep_current_ua")
@@ -61,12 +66,14 @@ def report_data(measurement: dict, overview: dict) -> dict:
     variability = m.get('cycle_energy', a.get('confirmed_cycles', {})).get('wake_variability', {})
     return {
         "name": m["name"], "id": m["id"], "status": m["status"],
-        "generated": date(datetime.now(timezone.utc).isoformat()),
+        "generated": date(datetime.now(timezone.utc), timezone_name),
+        "timezone": timezone_name,
         "notes": m.get("notes") or "Keine Notizen hinterlegt.",
         "error": m.get("error") or "",
         "context": [[label, str(m.get(key) or "—")] for label, key in [
             ("Projekt", "project"), ("Prüfling", "device"), ("Firmware", "firmware")]] + [
-            ["Beginn", date(m.get("started_at"))], ["Ende", date(m.get("finished_at"))],
+            ["Beginn", date(m.get("started_at"), timezone_name)],
+            ["Ende", date(m.get("finished_at"), timezone_name)],
             ["Messdauer (Zeitstempel)", number(m.get("duration_s"), "s")],
             ["Zeitachse (Samples inkl. Lücken)", number(a.get("timeline_duration_s"), "s")]],
         "setup": [
@@ -134,9 +141,9 @@ def report_data(measurement: dict, overview: dict) -> dict:
     }
 
 
-def render_report(measurement: dict, overview: dict) -> bytes:
+def render_report(measurement: dict, overview: dict, *, timezone_name="Europe/Berlin") -> bytes:
     import typst
 
     # User text remains JSON data; it is never interpreted as Typst source.
     return typst.compile(str(TEMPLATE), root=str(TEMPLATE.parent),
-                         sys_inputs={"report": json.dumps(report_data(measurement, overview), ensure_ascii=False)})
+                         sys_inputs={"report": json.dumps(report_data(measurement, overview, timezone_name=timezone_name), ensure_ascii=False)})

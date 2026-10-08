@@ -27,7 +27,12 @@ def assert_page_content_fits(document):
 
 
 @pytest.mark.parametrize('multi', [False, True])
-def test_download_and_pdf_share_the_creation_timestamp_without_browser_chart(tmp_path, monkeypatch, multi):
+@pytest.mark.parametrize('timezone_name,expected_created', [
+    ('Europe/Berlin', '07.10.2026 15:14:15.123456 CEST (UTC+02:00)'),
+    ('UTC', '07.10.2026 13:14:15.123456 UTC (UTC+00:00)'),
+])
+def test_download_and_pdf_share_the_creation_timestamp_without_browser_chart(
+        tmp_path, monkeypatch, multi, timezone_name, expected_created):
     class FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -35,7 +40,7 @@ def test_download_and_pdf_share_the_creation_timestamp_without_browser_chart(tmp
 
     monkeypatch.setattr('app.main.datetime', FrozenDatetime)
     measurement = {'id': 'battery-test', 'name': 'Sensor · Laufzeitprüfung', 'cycle_energy': summary()}
-    settings = Settings(_env_file=None, data_dir=tmp_path, database_url=f"sqlite:///{tmp_path / 'battery.db'}")
+    settings = Settings(_env_file=None, data_dir=tmp_path, database_url=f"sqlite:///{tmp_path / 'battery.db'}", timezone=timezone_name)
     body = {'energy_wh': 1, 'mode': 'sleep', 'value': 86400}
     if multi:
         body.update(sources=[{'measurement_id': 'battery-test'}], weighting='mean')
@@ -50,7 +55,7 @@ def test_download_and_pdf_share_the_creation_timestamp_without_browser_chart(tmp
     with pymupdf.open(stream=response.content, filetype='pdf') as document:
         assert len(document) == 2
         for page in document:
-            assert '07.10.2026 13:14:15.123456 UTC' in page.get_text()
+            assert expected_created in page.get_text()
         assert 'Berechnetes Betriebsszenario' in document[0].get_text()
         assert 'Messgrundlage und Verfahren' in document[1].get_text()
         assert 'Rechenmodell' in document[1].get_text()

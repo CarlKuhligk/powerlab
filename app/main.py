@@ -351,7 +351,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generated_at = datetime.now(timezone.utc)
         try:
             measurements = [mgr().get_measurement(s.measurement_id) for s in payload.sources]
-            body = render_multi_report(measurements, payload, generated_at=generated_at)
+            body = render_multi_report(measurements, payload, generated_at=generated_at, timezone_name=settings.timezone)
         except KeyError as error:
             raise HTTPException(status_code=404, detail='Measurement not found') from error
         except ValueError as error:
@@ -365,7 +365,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generated_at = datetime.now(timezone.utc)
         try:
             measurement = mgr().get_measurement(measurement_id)
-            body = render_report(measurement, measurement['cycle_energy'], payload, generated_at=generated_at)
+            body = render_report(measurement, measurement['cycle_energy'], payload, generated_at=generated_at, timezone_name=settings.timezone)
         except KeyError as error:
             raise HTTPException(status_code=404, detail='Measurement not found') from error
         except ValueError as error:

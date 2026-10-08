@@ -9,18 +9,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .battery_life import combine, device_distribution, evaluate, measured_statistics, uncertainty, profile
-from .report import number
+from .report import date, number
 
 TEMPLATE = Path(__file__).parent / 'templates' / 'battery-life.typ'
 
 
-def report_data(measurement, summary, request, combined=None, generated_at=None):
+def report_data(measurement, summary, request, combined=None, generated_at=None, *, timezone_name="Europe/Berlin"):
     data = combined if combined is not None else profile(summary)
     point = evaluate(data, request.energy_wh, request.mode, request.value)
     estimate = uncertainty(data, request.energy_wh, request.mode, request.value)
     devices = device_distribution(data, request.energy_wh, request.mode, request.value)
     statistics = data['statistics'] if combined is not None else measured_statistics(summary)
-    generated_at = (generated_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    generated_at = generated_at or datetime.now(timezone.utc)
     def lifetime_unit(hours):
         return ((8760, 'Jahre') if hours >= 8760 else (730, 'Monate') if hours >= 2160
                         else (168, 'Wochen') if hours >= 336 else (24, 'Tage') if hours >= 48
@@ -34,7 +34,7 @@ def report_data(measurement, summary, request, combined=None, generated_at=None)
     duty = point['duty_pct']
     return {
         'name': measurement['name'], 'id': measurement['id'],
-        'generated': generated_at.strftime('%d.%m.%Y %H:%M:%S.%f UTC'),
+        'generated': date(generated_at, timezone_name, microseconds=True),
         'chart_point': point, 'chart_estimate': estimate,
         'interval': (number(estimate['percentiles_h']['5'] / factor) + ' bis ' +
                      number(estimate['percentiles_h']['95'] / factor, unit)) if estimate['available'] else 'Nicht schätzbar',
@@ -84,7 +84,7 @@ def report_data(measurement, summary, request, combined=None, generated_at=None)
     }
 
 
-def report_data_many(measurements, request, generated_at=None):
+def report_data_many(measurements, request, generated_at=None, *, timezone_name="Europe/Berlin"):
     requested = {s.measurement_id: s.weight for s in request.sources}
     sources = [{'id': m['id'], 'name': m['name'], 'weight': requested[m['id']],
                 'summary': m['cycle_energy']} for m in measurements]
@@ -95,7 +95,7 @@ def report_data_many(measurements, request, generated_at=None):
         if shares[m['id']] > 0)}
     result = report_data({'id': 'Kombinierte Messungen' if len(measurements) > 1 else measurements[0]['id'],
                           'name': f'{len(measurements)} ausgewählte Messungen' if len(measurements) > 1 else measurements[0]['name']},
-                         summary, request, combined=data, generated_at=generated_at)
+                         summary, request, combined=data, generated_at=generated_at, timezone_name=timezone_name)
     result['setup'][1] = ['Messspannungen', ', '.join(number(v, 'V') for v in sorted({
         s['voltage_v'] for s in data['sources'] if s['share'] > 0}))]
     return result
@@ -120,12 +120,12 @@ def report_filename(generated_at, measurement_id='combined'):
     return f'battery_life_{safe_id}_{timestamp}.pdf'
 
 
-def render_report(measurement, summary, request, generated_at=None):
-    return _compile(report_data(measurement, summary, request, generated_at=generated_at), request.chart_png)
+def render_report(measurement, summary, request, generated_at=None, *, timezone_name="Europe/Berlin"):
+    return _compile(report_data(measurement, summary, request, generated_at=generated_at, timezone_name=timezone_name), request.chart_png)
 
 
-def render_multi_report(measurements, request, generated_at=None):
-    return _compile(report_data_many(measurements, request, generated_at=generated_at), request.chart_png)
+def render_multi_report(measurements, request, generated_at=None, *, timezone_name="Europe/Berlin"):
+    return _compile(report_data_many(measurements, request, generated_at=generated_at, timezone_name=timezone_name), request.chart_png)
 
 
 def _compile(data, chart_png=None):
