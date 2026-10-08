@@ -9,11 +9,11 @@
   --line-subtle: #222c38;
   --text: #edf2f7;
   --muted: #9aa9ba;
-  --accent: #79ddb0;
-  --accent2: #a0ebc9;
+  --accent: #65d98b;
+  --accent2: #8ee7aa;
   --danger: #ff9297;
   --warn: #eac17c;
-  --blue: #8ab9f5;
+  --blue: #6ea8fe;
   --radius: 12px;
   --radius-sm: 8px;
   --space: 20px;
@@ -313,7 +313,7 @@ input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator{opacity
 .trigger-field{display:grid;gap:6px;min-width:0}
 .trigger-label{position:relative;display:flex;align-items:center;gap:7px;min-height:20px}
 .field-help{display:inline-flex;align-items:center}
-.info-button{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:1px solid #52616e;border-radius:50%;background:transparent;color:#aab8c4;font-size:12px;font-weight:700;line-height:1;cursor:help}
+.info-button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;padding:0;border:1px solid #52616e;border-radius:50%;background:transparent;color:#aab8c4;font-size:11px;font-weight:600;line-height:1;cursor:help}
 .info-button:hover,.info-button:focus-visible{color:var(--accent2);border-color:var(--accent);outline:2px solid #65d98b40;outline-offset:2px}
 .field-tooltip{position:absolute;left:0;bottom:100%;z-index:10;width:min(320px,100%);padding:11px 13px;border:1px solid #46566b;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);box-shadow:0 8px 24px #0008;font-size:12px;font-weight:400;line-height:1.55;visibility:hidden;opacity:0;transition:opacity .12s ease}
 .field-help:hover .field-tooltip,.field-help:focus-within .field-tooltip{visibility:visible;opacity:1}
@@ -383,23 +383,30 @@ input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator{opacity
 @media(max-width:600px){#measurementForm .schedule-row{grid-template-columns:minmax(0,1fr);gap:12px;min-height:0}#measurementForm .schedule-row+.schedule-row{min-height:0}#measurementForm .schedule-details>.schedule-hint{padding-top:0}}
 #measurementForm .field-tooltip{width:min(320px,calc(100vw - 80px));max-width:100%;bottom:calc(100% + 6px)}
 
-/* Form sections share the same hierarchy and focus treatment. */
-#measurementForm fieldset{--section-rgb:121,221,176;--section-accent:var(--accent);background:transparent;border:1px solid var(--line);padding:20px;margin-bottom:20px;border-radius:var(--radius)}
-#measurementForm legend{display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:600;letter-spacing:0}
-#measurementForm .section-number{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);font-size:11px;font-variant-numeric:tabular-nums}
+/* Consistent form spacing preserves each section's established accent. */
+#measurementForm .measurement-basics{--section-rgb:125,185,244;--section-accent:#a3cef8}
+#measurementForm .schedule-box{--section-rgb:224,177,102;--section-accent:#edcb96}
+#measurementForm .event-settings{--section-rgb:173,151,229;--section-accent:#c8b7f2}
+#measurementForm .measurement-preview{--section-rgb:101,217,139;--section-accent:#8ee7aa}
+#measurementForm fieldset{background:linear-gradient(110deg,rgba(var(--section-rgb),.045),rgba(var(--section-rgb),.012));border:1px solid rgba(var(--section-rgb),.22);border-left:3px solid rgba(var(--section-rgb),.65);padding:20px;margin-bottom:20px;border-radius:var(--radius)}
+#measurementForm fieldset:focus-within{border-color:rgba(var(--section-rgb),.42);border-left-color:var(--section-accent)}
+#measurementForm legend{display:flex;align-items:center;gap:10px;color:var(--section-accent);font-size:14px;font-weight:600;letter-spacing:0}
+#measurementForm .section-number{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(var(--section-rgb),.12);color:var(--section-accent);border:1px solid rgba(var(--section-rgb),.25);font-size:11px;font-variant-numeric:tabular-nums}
 #measurementForm input,#measurementForm select,#measurementForm textarea{min-height:40px}
+#measurementForm fieldset input:hover:not(:disabled),#measurementForm fieldset select:hover:not(:disabled),#measurementForm fieldset textarea:hover:not(:disabled){border-color:rgba(var(--section-rgb),.5)}
+#measurementForm fieldset input:focus,#measurementForm fieldset select:focus,#measurementForm fieldset textarea:focus{border-color:var(--section-accent);box-shadow:0 0 0 3px rgba(var(--section-rgb),.14)}
 #measurementForm input[type="number"],#measurementForm input[type="datetime-local"]{font-variant-numeric:tabular-nums}
 #measurementForm .trigger-label:focus-within label{color:var(--text)}
-#measurementForm .info-button{width:22px;height:22px;flex-shrink:0;border-color:#46566b;color:var(--muted);cursor:pointer}
-#measurementForm .info-button:hover,#measurementForm .info-button:focus-visible{border-color:var(--accent);background:#79ddb010;color:var(--accent2);outline:2px solid #79ddb033;outline-offset:2px}
-#measurementForm .field-tooltip{border-color:#46566b;background:var(--panel2);color:var(--text)}
-#measurementForm .shared-settings{border-top-color:var(--line)}
+#measurementForm .info-button{cursor:help}
+#measurementForm .info-button:hover,#measurementForm .info-button:focus-visible{border-color:var(--section-accent);background:rgba(var(--section-rgb),.08);color:var(--section-accent);outline:2px solid rgba(var(--section-rgb),.25);outline-offset:2px}
+#measurementForm .field-tooltip{border-color:rgba(var(--section-rgb),.45);background:var(--panel2);color:var(--text)}
+#measurementForm .shared-settings{border-top-color:rgba(var(--section-rgb),.18)}
 #measurementForm .shared-settings h3{color:var(--muted);font-size:12px}
 @media(max-width:780px){#measurementForm .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){#measurementForm{padding:16px 14px 0}#measurementForm .form-grid{grid-template-columns:1fr}#measurementForm fieldset{padding:12px}#measurementForm .dialog-actions{margin-inline:-14px;padding:12px 14px}#measurementForm .dialog-head h2{font-size:21px}}
 
 /* Measurement detail: compact metadata, consistent metrics and semantic accents. */
-#detailView{--detail-sleep:#60a5fa;--detail-wake:#f5bd5b;--detail-current:#83d9bc;--detail-timing:var(--muted);--detail-energy:var(--muted);--detail-neutral:#aebdcd}
+#detailView{--detail-sleep:#60a5fa;--detail-wake:#f5bd5b;--detail-current:#83d9bc;--detail-timing:#dfa6c6;--detail-energy:#c5a9f5;--detail-neutral:#aebdcd}
 #detailView .detail-sleep{--detail-accent:var(--detail-sleep)}
 #detailView .detail-wake{--detail-accent:var(--detail-wake)}
 #detailView .detail-current{--detail-accent:var(--detail-current)}
@@ -418,50 +425,53 @@ input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator{opacity
 .detail-detection-section>h3{font-size:12px;font-weight:600;color:#c0cdde;margin:0 0 12px}
 .detection-metadata{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .detection-summary{min-width:0;padding-left:12px;border-left:2px solid var(--detail-accent)}
-#detailView h4{font-size:13px;font-weight:600;margin:0 0 12px;color:var(--text)}
+#detailView h4{font-size:13px;font-weight:600;margin:0 0 12px;color:var(--detail-accent,#b8c5d2)}
 #detailView .detection-summary dl{display:grid;grid-template-columns:1fr;gap:9px;margin:0}
 .detection-summary dl>div{display:grid;gap:3px}
 #detailView .detection-summary dt{font-size:11px;color:#93a0ad}
 #detailView .detection-summary dd{font-size:12px;font-variant-numeric:tabular-nums;line-height:1.5}
 .detail-metric-groups{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
-.metric-group{min-width:0;padding:20px;border-top:1px solid var(--line)}
-#detailView .metric-group h3{font-size:12px;color:var(--muted);margin:0 0 16px}
+.metric-group{min-width:0;padding:20px;border-top:2px solid var(--detail-accent)}
+#detailView .metric-group h3{font-size:12px;color:var(--detail-accent);margin:0 0 16px}
 #detailView .metric-group dl{display:grid;grid-template-columns:1fr;gap:12px;margin:0}
 .metric-group dl>div{min-width:0}
 .metric-group dl>div+div{border-top:1px solid var(--line);padding-top:12px}
 #detailView .metric-group dt{font-size:11px;color:var(--muted)}
-#detailView .metric-group dd{font-size:21px;line-height:1.3;font-weight:650;margin-top:5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--text)}
+#detailView .metric-group dd{font-size:21px;line-height:1.3;font-weight:650;margin-top:5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--detail-accent,var(--text))}
 #detailView .card-title-row p{font-size:12px;line-height:1.6}
 .detail-state-legend{display:flex;gap:16px;padding-top:3px;font-size:11px;color:#bac5ce;white-space:nowrap}
 .detail-state-legend span{display:flex;align-items:center;gap:6px}
 .detail-state-legend span::before{content:'';width:7px;height:7px;background:var(--detail-accent);border-radius:50%}
 #historyOverviewChart{height:260px}
-#wakeEventChart{height:360px}
-@media(max-width:600px){#wakeEventChart{height:480px}#wakeEventChart .scatterlayer .text{display:none}}
+.event-chart-container{position:relative;height:360px}
+#wakeEventChart{height:100%}
+#wakeEventStatus{position:absolute;inset:0;z-index:2;height:auto;min-height:0;pointer-events:none}
+#wakeEventStatus.event-refreshing{inset:8px 8px auto auto;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel2);font-size:12px}
+@media(max-width:600px){.event-chart-container{height:480px}#wakeEventChart .scatterlayer .text{display:none}}
 #detailView .event-display-help{position:relative;vertical-align:middle;margin-left:4px}
-#detailView .event-display-help .info-button{width:21px;height:21px;cursor:pointer;color:#acbdd0;border-color:#475768}
+#detailView .event-display-help .info-button{color:#acbdd0;border-color:#475768}
 #detailView .event-display-help .field-tooltip{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:300px;max-width:calc(100vw - 48px);font-size:12px;line-height:1.6}
 #detailView .event-count{background:#c0cdde12;color:var(--detail-neutral);border:1px solid #c0cdde30;font-weight:500;text-transform:none}
-#detailView .event-protocol{border-top:1px solid var(--line)}
+#detailView .event-protocol{border-top:2px solid var(--detail-neutral)}
 #detailView .event-phase{display:inline;color:var(--detail-accent);font:inherit;white-space:nowrap}
-#detailView .event-open{padding:0;background:transparent;border:0;border-radius:0;text-align:left}
+#detailView .event-open{min-height:0;padding:0;background:transparent;border:0;border-radius:0;text-align:left}
 #detailView .event-open:hover{text-decoration:underline;text-underline-offset:3px}
 #detailView .event-open:focus-visible{outline:2px solid var(--detail-accent);outline-offset:3px}
 #detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected{background:#c0cdde0d;box-shadow:inset 3px 0 var(--detail-neutral)}
 #detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected td{color:var(--text)}
-#detailView .sleep-analysis-card{margin-top:16px;border-top:1px solid var(--line)}
+#detailView .sleep-analysis-card{margin-top:16px;border-top:2px solid var(--detail-sleep)}
 #detailView .sleep-analysis-card>.card-title-row{margin:0;padding:20px;border-bottom:1px solid var(--line)}
-#detailView .sleep-analysis-card h3,#detailView .sleep-analysis-card h4{color:var(--text)}
+#detailView .sleep-analysis-card h3,#detailView .sleep-analysis-card h4{color:var(--detail-sleep)}
 #detailView .sleep-analysis-card .card-title-row>div{min-width:0}
 #detailView .sleep-analysis-card .card-title-row button{flex-shrink:0}
 #detailView .sleep-analysis-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:20px;margin:0}
 #detailView .sleep-analysis-kpis .kpi{background:var(--input);border-radius:8px;padding:14px;min-width:0}
 #detailView .sleep-analysis-kpis .kpi span{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.5}
-#detailView .sleep-analysis-kpis .kpi strong{font-size:21px;line-height:1.3;color:var(--text);white-space:normal;overflow:visible;overflow-wrap:anywhere}
+#detailView .sleep-analysis-kpis .kpi strong{font-size:21px;line-height:1.3;color:var(--detail-sleep);white-space:normal;overflow:visible;overflow-wrap:anywhere}
 @media(max-width:780px){#detailView .sleep-analysis-card>.card-title-row{flex-wrap:wrap}#detailView .sleep-analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){#detailView .sleep-analysis-card>.card-title-row{padding:14px}#detailView .sleep-analysis-card .card-title-row button{width:100%}#detailView .sleep-analysis-kpis{gap:10px;padding:14px}#detailView .sleep-analysis-kpis .kpi{padding:12px}#detailView .sleep-analysis-kpis .kpi strong{font-size:18px}}
-#detailView .wake-analysis-card{margin-top:16px;border-top:1px solid var(--line)}
-#detailView .wake-analysis-card h3{color:var(--text);font-size:15px}
+#detailView .wake-analysis-card{margin-top:16px;border-top:2px solid var(--detail-wake)}
+#detailView .wake-analysis-card h3{color:var(--detail-wake);font-size:15px}
 #detailWakeAnalysisCount{font-size:11px;color:var(--detail-wake);white-space:nowrap}
 #detailView .wake-analysis-card .form-hint{font-size:12px;line-height:1.65;color:var(--muted);margin-top:8px}
 #detailView .wake-analysis-card .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}

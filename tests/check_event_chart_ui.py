@@ -20,6 +20,47 @@ app = (ROOT / 'app/static/app.js').read_text(encoding='utf-8')
 app = re.sub(r'^init\(\);\s*$', '', app, flags=re.M)
 app = app[:app.index('CurrentInputs.install();')]
 
+
+def check_zoom_layout(page, chart, time_range):
+    """Hold both the request and redraw open to catch loading layout shifts."""
+    before = chart.bounding_box()
+    card_before = page.locator('#wakeEventCard').bounding_box()
+    page.evaluate('''range => {
+      window.originalFetch=window.fetch;
+      window.fetch=() => new Promise(resolve => {
+        window.finishEventFetch=() => resolve({ok:true,json:async()=>({...eventFixture})});
+      });
+      window.originalReact=Plotly.react;
+      Plotly.react=async (...args) => {
+        await new Promise(resolve => {window.finishEventRender=resolve});
+        return originalReact(...args);
+      };
+      document.getElementById('wakeEventChart').emit('plotly_relayout',{'xaxis.range':range});
+    }''', time_range)
+    status = page.locator('#wakeEventStatus')
+    page.wait_for_function("document.getElementById('wakeEventStatus').classList.contains('event-refreshing')")
+    assert status.is_visible()
+    assert chart.is_visible()
+    assert chart.bounding_box() == before, 'Loading shifted the chart'
+    assert page.locator('#wakeEventCard').bounding_box() == card_before
+    status_box = status.bounding_box()
+    assert status_box['height'] < 50
+    assert status_box['y'] >= before['y']
+    assert status_box['x'] + status_box['width'] <= before['x'] + before['width']
+    assert status.evaluate("el => getComputedStyle(el).pointerEvents") == 'none'
+    page.evaluate('finishEventFetch()')
+    page.wait_for_function('state.eventPlotPending === 1')
+    assert status.is_visible()
+    assert chart.bounding_box() == before, 'Redrawing shifted the chart'
+    page.evaluate('finishEventRender()')
+    page.wait_for_function("document.getElementById('wakeEventStatus').classList.contains('hidden') && state.eventPlotPending === 0")
+    assert chart.bounding_box() == before, 'Completed zoom shifted the chart'
+    assert page.locator('#wakeEventCard').bounding_box() == card_before
+    page.evaluate('''() => {
+      window.fetch=originalFetch;Plotly.react=originalReact;
+    }''')
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True, channel='msedge')
     page = browser.new_page(viewport={'width': 1440, 'height': 1000})
@@ -90,6 +131,8 @@ with sync_playwright() as p:
     page.wait_for_function("document.getElementById('wakeEventChart')._fullLayout.yaxis.type === 'linear' && state.eventPlotPending === 0")
     assert chart.locator('.legendtext').all_text_contents() == expected
 
+    check_zoom_layout(page, chart, [0, 200000])
+
     # Maximum supported point budget: exercise a noisy waveform, not just a flat line.
     render_ms = page.evaluate('''async () => {
       const count=50000,t_us=Array.from({length:count},(_,i)=>i*10-100000);
@@ -110,8 +153,9 @@ with sync_playwright() as p:
     assert legend_box['x'] >= chart_box['x'] and legend_box['y'] >= chart_box['y']
     assert legend_box['x'] + legend_box['width'] <= chart_box['x'] + chart_box['width'] + 1
     assert legend_box['y'] + legend_box['height'] <= chart_box['y'] + chart_box['height'] + 1
+    check_zoom_layout(page, chart, [20000, 100000])
     chart.screenshot(path=str(ARTIFACTS / 'event-chart-mobile.png'))
     assert not errors, errors
     browser.close()
 
-print(f'PASS: phase text, complete legend, SVG rings, marker hover, both scales, mobile layout; 50,000 points rendered in {render_ms} ms')
+print(f'PASS: phase text, complete legend, SVG rings, marker hover, both scales, stable zoom loading on desktop/mobile; 50,000 points rendered in {render_ms} ms')

@@ -901,7 +901,7 @@ async function loadEventView(measurementId,eventId,range,token){
   }
   const request=new AbortController();eventRequest=request;
   try{
-    $('wakeEventStatus').className='event-loading';$('wakeEventStatus').textContent='Details werden geladen …';
+    $('wakeEventStatus').className=state.currentEvent?'event-loading event-refreshing':'event-loading';$('wakeEventStatus').textContent='Details werden geladen …';
     let data;
     for(let attempt=0;attempt<4;attempt++){
       if(request.signal.aborted)throw new DOMException('Cancelled','AbortError');

@@ -13,7 +13,7 @@
 .battery-result-grid { display: grid; grid-template-columns: 1.1fr 1.2fr .7fr; gap: 16px; margin: 24px 0 16px; }
 .battery-result-grid > div { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--input); }
 .battery-result-grid span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.6; }
-.battery-result-grid strong { display: block; font-size: 22px; line-height: 1.4; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.battery-result-grid strong { display: block; font-size: 22px; line-height: 1.4; font-weight: 600; color: var(--accent2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .battery-result-grid > div:first-child strong { color: var(--accent2); }
 .battery-result-grid > div:nth-child(2) strong { font-size: 17px; color: var(--blue); }
 .battery-chart-card { min-width: 0; }
@@ -34,9 +34,9 @@
 #batteryView table td, #batteryView table th { white-space: nowrap; }
 .battery-device-card { padding: 24px; margin-bottom: 20px; }
 .battery-device-card .battery-result-grid { grid-template-columns: 1fr 1fr; }
-.battery-device-card .battery-result-grid strong { font-size: 19px; color: var(--text); }
+.battery-device-card .battery-result-grid strong { font-size: 19px; }
 .battery-help { font-size: 12px; color: var(--muted); line-height: 1.7; }
-.battery-help summary { color: #c0cdde; font-weight: 500; padding: 4px 0; min-height: 32px; }
+.battery-help summary { color: var(--blue); font-weight: 500; padding: 4px 0; min-height: 32px; }
 .battery-help summary:hover { color: var(--text); }
 .battery-help[open] summary { margin-bottom: 10px; }
 .battery-help p + p { margin-top: 12px; }
