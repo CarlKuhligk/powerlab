@@ -192,12 +192,15 @@ button:disabled{opacity:.45;cursor:default}
 .detail-state-legend span::before{content:'';width:7px;height:7px;background:var(--detail-accent);border-radius:50%}
 #historyOverviewChart{height:260px}
 #wakeEventChart{height:360px}
+@media(max-width:600px){#wakeEventChart{height:480px}#wakeEventChart .scatterlayer .text{display:none}}
 #detailView .event-display-help{position:relative;vertical-align:middle;margin-left:4px}
 #detailView .event-display-help .info-button{width:21px;height:21px;cursor:pointer;color:#acbdd0;border-color:#475768}
 #detailView .event-display-help .field-tooltip{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:300px;max-width:calc(100vw - 48px);font-size:12px;line-height:1.6}
 #detailView .event-count{background:#aebdcd12;color:var(--detail-neutral);border:1px solid #aebdcd30;font-weight:500;text-transform:none}
 #detailView .event-protocol{border-top:2px solid var(--detail-neutral)}
-#detailView .event-open{padding:4px 8px;background:#ffffff05;border:1px solid #ffffff18;color:var(--detail-accent);font-size:11px;white-space:nowrap}
+#detailView .event-phase{display:inline;color:var(--detail-accent);font:inherit;white-space:nowrap}
+#detailView .event-open{padding:0;background:transparent;border:0;border-radius:0;text-align:left}
+#detailView .event-open:hover{text-decoration:underline;text-underline-offset:3px}
 #detailView .event-open:focus-visible{outline:2px solid var(--detail-accent);outline-offset:3px}
 #detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected{background:#aebdcd0d;box-shadow:inset 3px 0 var(--detail-neutral)}
 #detailView :is(.wake-event-table-card,.event-protocol) tbody tr.selected td{color:var(--text)}

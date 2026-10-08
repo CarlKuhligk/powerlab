@@ -61,7 +61,7 @@ function bindEventChartInteractions(d,unit){
     if(point.curveNumber===0){
       const raw=d.current_ua[index],display=eventDisplayCurrent(d)[index];
       details=d.aggregated?`Block-Extremwert: <strong>${escapeHtml(fmtCurrent(raw))}</strong><br>Zeitposition angenähert`:d.downsampled?`Rohsample aus Min/Max-Auswahl: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:(state.historySmoothing==='off'?`Strom: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:`Geglättet: <strong>${escapeHtml(fmtCurrent(display))}</strong><br>Rohwert: ${escapeHtml(fmtCurrent(raw))}`);
-    }else if(point.data?.name==='Sleep / Wake'){
+    }else if(point.data?.meta?.role==='state-marker'){
       details=escapeHtml(point.customdata||point.text||'Zustandswechsel');
     }else{
       const bit=Number(String(point.data?.name||'').slice(1));
@@ -638,7 +638,7 @@ function renderEventProtocol(m,overview){
   $('eventProtocol').open=false;
   $('eventRows').innerHTML=rows.map(p=>{
     const tone=p.kind==='sleep'?'detail-sleep':p.kind==='wake'?'detail-wake':'detail-neutral';
-    const label=p.id!=null?`<button class="event-open ${tone}" aria-label="${escapeHtml(p.label)} öffnen">${escapeHtml(p.label)}</button>`:`<span class="${tone}">${escapeHtml(p.label)}</span>`;
+    const label=p.id!=null?`<button type="button" class="event-phase event-open ${tone}" aria-label="${escapeHtml(p.label)} öffnen">${escapeHtml(p.label)}</button>`:`<span class="event-phase ${tone}">${escapeHtml(p.label)}</span>`;
     const data=p.interpolated_samples?'Mit ergänzten Daten':p.valid?'Gültiger Zyklus':p.kind==='background'?'Im Sleep enthalten':'Ohne gültigen Zyklus';
     return `<tr${p.id!=null?` data-event="${Number(p.id)}"`:''}><td>${label}</td><td>${escapeHtml(fmtDuration(p.start_s))}</td><td>${escapeHtml(fmtDuration(p.period_s))}</td><td>${escapeHtml(fmtEventDuration(p.duration_s==null?null:p.duration_s*1e6))}</td><td>${escapeHtml(fmtCurrent(p.mean_ua))}</td><td>${escapeHtml(fmtCurrent(p.peak_ua))}</td><td>${escapeHtml(fmtCharge(p.charge_uc))}</td><td>${escapeHtml(fmtEnergy(p.energy_uwh))}</td><td>${p.digital_mask_seen==null?'—':`0x${Number(p.digital_mask_seen).toString(16).padStart(2,'0')}`}</td><td>${data}</td></tr>`;
   }).join('')||'<tr><td colspan="10">Keine Sleep- oder Wake-Phasen verfügbar.</td></tr>';
@@ -982,8 +982,10 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
   const e=d.event,actual=d.current_ua||[],display=eventDisplayCurrent(d),smoothed=!d.aggregated&&!d.downsampled&&state.historySmoothing!=='off';
   const unit=eventCurrentUnit(d);
   const y=display.map(v=>v==null?null:(state.historyScale==='log'?Math.max(.001,v):v)*unit.factor);
-  const traces=[{x:d.t_us||[],y,customdata:smoothed?actual.map((v,i)=>[v,display[i]]):actual,type:'scattergl',mode:'lines',name:d.aggregated?'Block-Minima/Maxima':(smoothed?'Current · geglättet':'Current'),line:{width:1.1,color:'#65d98b'},hoverinfo:'none',yaxis:'y'}];
-  for(let bit=0;bit<8;bit++)if(!d.aggregated&&!d.downsampled&&(Number(e.digital_mask_seen||0)&(1<<bit))!==0)traces.push(digitalTransitionTrace(d.t_us||[],d.digital||[],bit));
+  // Keep the bounded event waveform and its markers in one SVG layer so rings
+  // stay smooth and appear above the current trace.
+  const traces=[{x:d.t_us||[],y,customdata:smoothed?actual.map((v,i)=>[v,display[i]]):actual,type:'scatter',mode:'lines',name:d.aggregated?'Block-Minima/Maxima':(smoothed?'Current · geglättet':'Current'),line:{width:1.1,color:'#65d98b'},hoverinfo:'none',yaxis:'y'}];
+  for(let bit=0;bit<8;bit++)if(!d.aggregated&&!d.downsampled&&(Number(e.digital_mask_seen||0)&(1<<bit))!==0)traces.push({...digitalTransitionTrace(d.t_us||[],d.digital||[],bit),type:'scatter'});
   for(const trace of traces)trace.hoverinfo='none';
   showWakeEventPanel();
   selectEventRow(e.id);
@@ -994,31 +996,35 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
   $('wakeEventSubtitle').innerHTML+=` · ${(d.t_us||[]).length.toLocaleString('de-DE')} Punkte <span class="field-help event-display-help"><button type="button" class="info-button" aria-label="Information zur Datendarstellung" aria-describedby="eventDisplayHint">i</button><span id="eventDisplayHint" class="field-tooltip" role="tooltip">${escapeHtml(displayHint)}</span></span>`;
   const hasDigital=traces.length>1;
   const eventMarkers=d.state_markers||[];
-  // Keep markers in the same WebGL layer as the waveform so the current trace
-  // cannot cover them. Label starts explicitly; confirmations remain hoverable.
-  if(eventMarkers.length)traces.push({
-    x:eventMarkers.map(m=>m.t_us),
-    y:eventMarkers.map(m=>(state.historyScale==='log'?Math.max(.001,m.current_ua):m.current_ua)*unit.factor),
-    customdata:eventMarkers.map(stateMarkerLabel),
-    text:eventMarkers.map(m=>m.kind==='wake_start'?'Wake-Start':m.kind==='sleep_start'?'Sleep-Start':''),
-    textposition:eventMarkers.map(m=>m.kind.startsWith('wake')?'top right':'top left'),
-    textfont:{size:11,color:eventMarkers.map(m=>m.kind.startsWith('wake')?'#f5bd5b':'#60a5fa')},
-    type:'scattergl',mode:'markers+text',name:'Sleep / Wake',
-    marker:{size:10,symbol:eventMarkers.map(m=>m.kind.endsWith('validated')?'circle-open':'circle'),color:eventMarkers.map(m=>m.kind.startsWith('wake')?'#f5bd5b':'#60a5fa'),line:{width:1,color:'#101419'}},
-    hovertemplate:'%{customdata}<br>%{x} µs<extra></extra>'
-  });
+  const markerKinds=[...new Set(eventMarkers.map(m=>m.kind))];
+  for(const kind of markerKinds){
+    const markers=eventMarkers.filter(m=>m.kind===kind),color=stateMarkerColor(markers[0]);
+    const confirmed=kind.endsWith('validated');
+    const name={wake_start:'Wake-Start',wake_validated:'Wake bestätigt',sleep_start:'Sleep-Start',sleep_validated:'Sleep bestätigt'}[kind]||stateMarkerLabel(markers[0]);
+    traces.push({
+      x:markers.map(m=>m.t_us),
+      y:markers.map(m=>(state.historyScale==='log'?Math.max(.001,m.current_ua):m.current_ua)*unit.factor),
+      customdata:markers.map(()=>name),
+      text:markers.map(()=>kind==='wake_start'||kind==='sleep_start'?name:''),
+      textposition:kind.includes('wake')?'top right':'top left',
+      textfont:{size:11,color},
+      type:'scatter',mode:'markers+text',name,legendgroup:kind,meta:{role:'state-marker'},
+      marker:{size:10,symbol:confirmed?'circle-open':'circle',color,line:{width:confirmed?2:1,color:confirmed?color:'#101419'}},
+      hoverinfo:'none'
+    });
+  }
   const visibleRange=state.eventVisibleRange;
   const fullRange=d.fullRange;
   const atFullRange=visibleRange&&fullRange&&visibleRange[0]===fullRange[0]&&visibleRange[1]===fullRange[1];
   const padding=atFullRange?Math.max(d.sample_period_us||1,(fullRange[1]-fullRange[0])*.025):0;
   const chartRange=atFullRange?[fullRange[0]-padding,fullRange[1]+padding]:visibleRange;
   const layout={
-    paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:82,r:58,t:10,b:70},
+    paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:82,r:58,t:60,b:70},
     xaxis:{title:{text:'Zeit relativ zum Trigger [µs]',standoff:14},gridcolor:'#222a31',color:'#aeb8c2',zeroline:true,zerolinecolor:'#58626c',showspikes:false,...(chartRange?{range:chartRange,autorange:false}:{})},
     yaxis:{title:{text:`Strom [${unit.label}]`,standoff:14},type:state.historyScale,gridcolor:'#222a31',color:'#aeb8c2',zeroline:false,showspikes:false,domain:hasDigital?[.28,1]:[0,1],uirevision:`event-y-${e.id}-${state.historyScale}-${unit.label}`},
     yaxis2:{title:{text:'Digital'},gridcolor:'#1b2228',color:'#8d99a5',domain:[0,.18],tickmode:'array',tickvals:[]},
-    font:{color:'#c8d0d8',size:11},hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',legend:{orientation:'h',y:1.08},
-    shapes:eventMarkers.length?eventMarkers.map(m=>({type:'line',x0:m.t_us,x1:m.t_us,y0:0,y1:1,yref:'paper',opacity:.3,line:{color:m.kind.startsWith('wake')?'#f5bd5b':'#60a5fa',width:1,dash:m.kind.endsWith('validated')?'dot':'solid'}})):[{type:'line',x0:0,x1:0,y0:0,y1:1,yref:'paper',opacity:.3,line:{color:'#f5bd5b',width:1,dash:'dot'}}],
+    font:{color:'#c8d0d8',size:11},hovermode:'closest',hoverlabel:{bgcolor:'#171d23',bordercolor:'#48535f',font:{color:'#edf2f6'}},dragmode:'zoom',showlegend:true,legend:{orientation:'h',x:0,xanchor:'left',y:1.02,yanchor:'bottom'},
+    shapes:eventMarkers.length?eventMarkers.map(m=>({type:'line',x0:m.t_us,x1:m.t_us,y0:0,y1:1,yref:'paper',legendgroup:m.kind,opacity:.3,line:{color:stateMarkerColor(m),width:1,dash:m.kind.endsWith('validated')?'dot':'solid'}})):[{type:'line',x0:0,x1:0,y0:0,y1:1,yref:'paper',opacity:.3,line:{color:'#f5bd5b',width:1,dash:'dot'}}],
     uirevision:`event-${state.currentMeasurement?.id}-${e.id}-${state.historyScale}`
   };
   return queueHistoryPlot(renderToken,'event',async()=>{
