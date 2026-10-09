@@ -317,6 +317,7 @@ class MeasurementManager:
             s.add(Measurement(
                 id=measurement_id, name=req.name, project=req.project, device=req.device, firmware=req.firmware, notes=req.notes,
                 serial_number=req.serial_number, hardware_version=req.hardware_version,
+                custom_fields_json=json.dumps([field.model_dump() for field in req.custom_fields]),
                 driver="ppk2", port=req.port, meter_mode=req.meter_mode, voltage_mv=req.voltage_mv, sample_rate_hz=self.settings.sample_rate_hz,
                 status=status, scheduled_start_at=start_at if req.start_mode == "scheduled" else None, scheduled_end_at=end_at,
                 requested_duration_s=req.duration_s if req.stop_mode == "duration" else None, start_mode=req.start_mode, stop_mode=req.stop_mode,
@@ -366,6 +367,7 @@ class MeasurementManager:
                 raise RuntimeError("Only pending scheduled measurements can be changed")
             m.name=req.name; m.project=req.project; m.device=req.device; m.firmware=req.firmware; m.notes=req.notes
             m.serial_number=req.serial_number; m.hardware_version=req.hardware_version
+            m.custom_fields_json=json.dumps([field.model_dump() for field in req.custom_fields])
             m.port=req.port; m.meter_mode=req.meter_mode; m.voltage_mv=req.voltage_mv
             m.scheduled_start_at=start_at; m.scheduled_end_at=end_at; m.requested_duration_s=req.duration_s if req.stop_mode == "duration" else None
             m.start_mode=req.start_mode; m.stop_mode=req.stop_mode; m.settings_json=json.dumps(req.model_dump(mode="json"))
@@ -954,7 +956,7 @@ class MeasurementManager:
                 [e for e in stored_events if e.event_kind == 'background'], payload['cycle_energy'])
             return payload
 
-    def _cycle_energy_for_session(self, session, measurement, custom_duration_s=None):
+    def _cycle_energy_for_session(self, session, measurement):
         mid = measurement.id
         events = list(session.scalars(select(WakeEvent).where(WakeEvent.measurement_id == mid)))
         segments = list(session.scalars(select(SleepSegment).where(SleepSegment.measurement_id == mid)))
@@ -962,14 +964,14 @@ class MeasurementManager:
             OverviewPoint.measurement_id == mid,
             OverviewPoint.kind.in_(['sleep_start', 'sleep_validated', 'wake_start', 'wake_validated']))))
         return confirmed_cycle_energy(measurement.sample_rate_hz or self.settings.sample_rate_hz,
-                                      measurement.voltage_mv, events, segments, points, custom_duration_s)
+                                      measurement.voltage_mv, events, segments, points)
 
-    def cycle_energy(self, measurement_id, custom_duration_s=None):
+    def cycle_energy(self, measurement_id):
         with self.db.session() as s:
             m = s.get(Measurement, measurement_id)
             if m is None:
                 raise KeyError(measurement_id)
-            return self._cycle_energy_for_session(s, m, custom_duration_s)
+            return self._cycle_energy_for_session(s, m)
 
     def patch_measurement(self, measurement_id: str, patch: MeasurementPatchRequest) -> dict:
         changes = patch.model_dump(exclude_none=True)
@@ -977,8 +979,14 @@ class MeasurementManager:
             m = s.get(Measurement, measurement_id)
             if not m:
                 raise KeyError(measurement_id)
+            settings_payload = json.loads(m.settings_json or "{}")
             for key, value in changes.items():
-                setattr(m, key, value)
+                if key == "custom_fields":
+                    m.custom_fields_json = json.dumps(value)
+                else:
+                    setattr(m, key, value)
+                settings_payload[key] = value
+            m.settings_json = json.dumps(settings_payload)
         payload = self.get_measurement(measurement_id)
         self._write_metadata_snapshot(measurement_id)
         return payload
@@ -1022,6 +1030,7 @@ class MeasurementManager:
             "firmware": m.firmware,
             "hardware_version": m.hardware_version,
             "notes": m.notes,
+            "custom_fields": json.loads(m.custom_fields_json or "[]"),
             "driver": m.driver,
             "port": m.port,
             "meter_mode": m.meter_mode,

@@ -7,8 +7,7 @@
   <title>PowerLab</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/powerlab-32.png">
   <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-ui-polish-refined">
-  <link rel="stylesheet" href="/static/battery-life.css?v=1.0.6-ui-polish-refined">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.6-profile-name-dialog">
   <script src="https://cdn.plot.ly/plotly-4.1.1.min.js"></script>
 </head>
 <body>
@@ -23,7 +22,6 @@
     <nav aria-label="Hauptnavigation">
       <button class="nav active" data-view="live" aria-current="page"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-6 4 12 3-6h4"/></svg><span>Aktiv</span><b id="liveCount" class="nav-count hidden">0</b></button>
       <button class="nav" data-view="measurements"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Messungen</span></button>
-      <button class="nav" data-view="battery"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="18" height="12" rx="2"/><path d="M22 10v4M6 10v4M10 10v4M14 10v4"/></svg><span>Batterielaufzeit</span></button>
     </nav>
     <div class="sidebar-bottom">
       <div class="status-line"><i class="ok" aria-hidden="true"></i><span>Lokaler Arbeitsbereich</span></div>
@@ -58,63 +56,6 @@
           <div id="scheduledCards" class="session-grid"></div>
           <div id="noScheduled" class="empty-inline">Keine Messung geplant.</div>
         </section>
-      </div>
-    </section>
-
-    <section id="batteryView" class="view">
-      <div class="card battery-source">
-        <div class="card-title-row"><div><h3>Von der Messung zur Batterielaufzeit</h3><p>Jede Messung repräsentiert ein Gerät: Sleep-Mittelwert, Wake-Schwankungen und Unterschiede zwischen Geräten.</p></div><button class="secondary" id="batteryRefresh">Messungen aktualisieren</button></div>
-        <div class="battery-source-controls">
-          <label class="battery-field">Messungen suchen<input id="batterySearch" type="search" placeholder="Name, Projekt oder Gerät"></label>
-          <label class="battery-field">Einfluss der Messungen<select id="batteryWeighting"><option value="mean">Mittel · jede Messung gleich</option><option value="cycle_count">Gewichtet · nach gültigen Zyklen</option><option value="custom">Eigene Gewichte</option></select></label>
-          <button class="secondary" id="batteryClearSelection">Auswahl aufheben</button>
-        </div>
-        <details class="battery-help"><summary>Wie wirkt die Gewichtung?</summary><p>Bei „Mittel“ zählt jede Messung gleich. „Gewichtet“ richtet den Einfluss nach der Anzahl gültiger Zyklen. Eigene Gewichte sind relative Anteile, zum Beispiel 7 und 3 für 70 % und 30 %. Gewicht 0 hat keinen Einfluss auf Ergebnis, Streuung oder Grenzen.</p></details>
-        <p id="batterySelectionCount" aria-live="polite">0 Messungen ausgewählt</p>
-        <div class="event-scroll battery-source-list"><table><thead><tr><th>Auswahl</th><th>Messung</th><th>Gültige Zyklen</th><th>Eigenes Gewicht</th><th>Einfluss</th></tr></thead><tbody id="batterySourceRows"></tbody></table></div>
-        <p id="batteryStatus" role="status" aria-live="polite">Wähle eine Messung mit gültigen Sleep-/Wake-Zyklen.</p>
-      </div>
-      <div class="battery-layout">
-        <div class="card battery-controls">
-          <h3>Deine Geräteeinstellung</h3>
-          <label class="battery-field">Nutzbare Batterieenergie<div class="battery-input-unit"><input id="batteryEnergy" type="number" min="0.000001" step="any" value="1" aria-label="Nutzbare Batterieenergie"><select id="batteryEnergyUnit" aria-label="Einheit der Batterieenergie"><option value="Wh">Wh</option><option value="mWh">mWh</option></select></div></label>
-          <details class="battery-help"><summary>Welche Batterieenergie eingeben?</summary><p>Verwende die im vorgesehenen Betrieb nutzbare Energie in Wh oder mWh. Bei annähernd konstanter Spannung gilt: Energie [Wh] = Kapazität [Ah] × Spannung [V]. Verluste der Spannungsversorgung und die Abschaltspannung müssen in deiner Energieangabe berücksichtigt sein; sie werden hier nicht zusätzlich berechnet.</p></details>
-          <label class="battery-field">Timing einstellen über<select id="batteryMode"><option value="period">Periodendauer · Wake zu Wake</option><option value="sleep" selected>Sleep-Dauer zwischen Wakes</option><option value="duty">Wake-Duty-Cycle</option></select></label>
-          <p class="form-hint">Bei fester Periodendauer verkürzt jeder längere Wake die anschließende Sleep-Zeit. Die Periode muss mindestens so lang wie der längste gültige Wake sein.</p>
-          <label class="battery-field"><span id="batteryValueLabel">Sleep-Dauer zwischen Wakes</span><div class="battery-input-unit"><input id="batteryValue" type="number" min="0" step="any" value="60" aria-label="Gewählte Periodendauer, Sleep-Dauer oder Duty-Cycle"><select id="batteryTimeUnit" aria-label="Zeiteinheit für Periode oder Sleep"><option value="seconds">Sekunden</option><option value="minutes">Minuten</option><option value="hours">Stunden</option></select></div></label>
-          <p id="batteryMeasuredMedian" class="form-hint"></p>
-          <p class="form-hint">Die Einstellung gilt für die Berechnung. Trage die gewünschte Periode, Sleep-Dauer oder den Duty-Cycle anschließend selbst im Gerät ein.</p>
-        </div>
-        <div class="card chart-card battery-chart-card">
-          <div class="card-title-row"><div><h3>Mittlere Laufzeit und ihre Unsicherheit</h3><p>Wake-Schwankungen je Gerät und Unterschiede zwischen den Geräten</p></div><button class="secondary" id="batteryExport" disabled>PDF-Bericht herunterladen</button></div>
-          <div class="battery-result-grid"><div><span>Geschätzte mittlere Laufzeit</span><strong id="batteryRuntime">—</strong></div><div><span>90-%-Unsicherheitsintervall · Näherung</span><strong id="batteryBand">—</strong></div><div><span>Mittlere Leistung</span><strong id="batteryPower">—</strong></div></div>
-          <p class="form-hint">Grün: Laufzeitschätzung · Blau: Unsicherheitsdichte · Schattierung: näherungsweises 90-%-Intervall.</p>
-          <div id="batteryChart" class="chart large-chart" aria-label="Unsicherheit der mittleren Laufzeit mit näherungsweisem 90-Prozent-Intervall"></div>
-          <p id="batteryDistributionNote" class="form-hint"></p>
-          <p id="batteryTiming"></p><p>Median der Wake-Energie: <strong id="batteryWakeEnergy">—</strong></p>
-        </div>
-      </div>
-      <div class="card battery-device-card">
-        <h3>Laufzeitstreuung zwischen Geräten</h3>
-        <div class="battery-result-grid"><div><span>Beobachtete Geräte · P5 bis P95</span><strong id="batteryDeviceBand">—</strong></div><div><span>Standardabweichung der Gerätelebensdauern</span><strong id="batteryDeviceSpread">—</strong></div></div>
-        <p id="batteryDeviceNote" class="form-hint"></p>
-      </div>
-      <div class="card table-card">
-        <div class="card-title-row"><div><h3>Übernommene Messstatistik</h3><p>Wake-Werte beschreiben Zyklen; Sleep-Werte vergleichen die gewichteten Mittelwerte der Geräte.</p></div></div>
-        <div class="event-scroll"><table><thead><tr><th>Kennwert</th><th>Mittelwert</th><th>Minimum</th><th>Maximum</th><th>Standardabweichung</th><th>Varianz</th><th>Relative Streuung</th></tr></thead><tbody id="batteryStatisticsRows"></tbody></table></div>
-        <details class="battery-help battery-assumptions"><summary>Messstatistik richtig lesen</summary><p>Der Sleep-Strom je Gerät ist gesamte Sleep-Ladung / gesamte gültige Sleep-Dauer, einschließlich periodischer Peaks. Minimum, Maximum, Standardabweichung und Varianz der Sleep-Werte beziehen sich auf diese Gerätemittelwerte. Bei nur einem Gerät ist die Gerätestreuung nicht schätzbar. Strom wird bei unterschiedlichen Messspannungen je Gerät berechnet.</p><p>Wake-Dauer und Wake-Energie bleiben gepaart. Ihre Tabellenwerte beschreiben die beobachteten Einzelzyklen, gewichtet mit Geräteanteil / Zyklusanzahl. Die Sleep-Gerätemittelwerte verwenden die Geräteanteile. Stichprobenvarianzen verwenden die Korrektur 1 − Summe der quadrierten Gewichte. Relative Streuung ist Standardabweichung / Betrag des Mittelwerts in Prozent.</p><p>Die Gerätelebensdauern werden mit der gleichen Timing-Einstellung aus den jeweiligen Gerätemittelwerten berechnet. Ihre beobachteten Perzentile beschreiben die ausgewählten Geräte und bilden keine Prognose für weitere Geräte.</p></details>
-      </div>
-      <div class="card table-card">
-        <div class="card-title-row"><div><h3>Unsicherheitsintervall der mittleren Laufzeit</h3><p>P5 und P95 begrenzen das näherungsweise 90-%-Intervall der Schätzung.</p></div></div>
-        <div class="event-scroll"><table><thead><tr><th>Perzentil</th><th>Quantilniveau</th><th>Laufzeitschätzung</th></tr></thead><tbody id="batteryPercentileRows"></tbody></table></div>
-        <details class="battery-help battery-assumptions" id="batteryMethod"><summary>Berechnung und Annahmen</summary>
-          <p><strong>Modell:</strong> Laufzeit = nutzbare Batterieenergie / mittlere Leistung. Die Zyklusenergie setzt sich aus gemessener Wake-Energie und Sleep-Leistung × gewählter Sleep-Dauer zusammen. Die mittlere Leistung ist Zyklusenergie / Zyklusdauer. Im Duty-Cycle-Modus ergibt sich die Sleep-Dauer aus der gemessenen mittleren Wake-Dauer und dem eingestellten Wake-Anteil.</p>
-          <p><strong>Timing:</strong> Bei fester Periodendauer gilt für jeden Wake: Sleep-Dauer = Periode − Wake-Dauer. Im Sleep-Modus bleibt die Sleep-Dauer fest; im Duty-Modus richtet sie sich nach der jeweiligen Wake-Dauer. Der Verbrauch wird je Gerät berechnet und danach gewichtet kombiniert. Lange Wakes verkürzen im Periodenmodus die Sleep-Zeit auch bei unterschiedlichen Gerätemittelwerten.</p>
-          <p><strong>Unsicherheit:</strong> Die Delta-Methode auf der logarithmischen Laufzeitskala erhält den Zusammenhang zwischen Wake-Dauer und Wake-Energie. Der Sleep-Wert je Gerät gilt als fest; die Form periodischer Peaks erzeugt keinen eigenen Unsicherheitsbeitrag. Die Wake-Mittelwertunsicherheit je Gerät ist die Varianz seiner linearisierten Beiträge / Zyklusanzahl. Zusätzlich wird die Varianz zwischen Gerätemittelwerten geschätzt, um bereits enthaltene Wake-Schätzunsicherheit korrigiert und bei null begrenzt. Beide Beiträge werden mit quadrierten Geräteanteilen zur Unsicherheit des Mittelwerts kombiniert. Mehr Zyklen reduzieren den Wake-Schätzfehler, nicht die dauerhaften Geräteunterschiede.</p>
-          <p><strong>Diagramm und Perzentile:</strong> Die blaue Kurve ist eine lognormale Näherung für die Unsicherheit der mittleren Laufzeit. Ihr Median (P50) entspricht der grünen Laufzeitschätzung. Die Fläche unter der Dichtekurve entspricht 100 %; die Höhe ist eine Dichte in Prozent pro Laufzeiteinheit, keine Wahrscheinlichkeit einer einzelnen Laufzeit. P5 bis P95 umfassen näherungsweise 90 % dieser Modellverteilung. Gezeigt werden ±4 Standardunsicherheiten auf der logarithmischen Skala, keine harten Min-/Max-Grenzen. Die Kurve ist keine Häufigkeitsverteilung dauerhaft wiederholter Einzelzyklen.</p>
-          <p><strong>Voraussetzungen:</strong> Jede Messung steht für ein anderes Gerät. Unabhängige, repräsentative Wake-Zyklen und Geräte unter vergleichbaren Bedingungen sowie genügend Sleep-Peak-Perioden für einen repräsentativen Sleep-Mittelwert. Mindestens zwei gültige Zyklen je aktivem Gerät für die Mittelwertunsicherheit; mindestens zwei aktive Geräte für Gerätestreuung. Mit nur einem Gerät gilt die Unsicherheit nur für dieses Gerät. Bei wenigen Geräten oder großer relativer Unsicherheit ist die Näherung eingeschränkt.</p>
-          <p><strong>Grenzen:</strong> Batterieenergie, Timing und Messungsanteile gelten als fest. Zeitliche Abhängigkeiten, systematische Messfehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen sind nicht enthalten. Das Intervall ist keine garantierte Laufzeitprognose.</p>
-        </details>
       </div>
     </section>
 
@@ -204,7 +145,7 @@
       <div id="wakeEventCard" class="card chart-card hidden"><div class="card-title-row"><div><h3 id="wakeEventTitle">Wake-Ereignis</h3><p id="wakeEventSubtitle">100-kS/s-Rohdaten</p></div><div class="event-chart-actions"><button class="secondary" id="backToOverview">← Zustandsübersicht</button><div class="segmented" id="historyScaleControls"><button class="active" data-history-scale="log">Log</button><button data-history-scale="linear">Linear</button></div><label class="smoothing-control" title="Maximale Zahl angezeigter Punkte. Beim Hineinzoomen werden feinere Daten bis zu allen Rohsamples nachgeladen."><span>Punkte / Ansicht</span><input id="eventPointBudget" type="number" min="100" max="50000" step="100" value="25000" aria-label="Maximale Punkte pro Ansicht"></label><label class="smoothing-control" title="Adaptive Glättung reduziert Rauschen und erhält starke Sprünge. Nur die Darstellung wird verändert."><span>Glättung</span><select id="historySmoothing" aria-label="Glättung des Stromverlaufs"><option value="off">Aus</option><option value="light">Leicht</option><option value="medium">Mittel</option><option value="strong">Stark</option></select></label></div></div><div class="event-chart-container chart-toolbar-container"><div id="wakeEventStatus" class="event-loading hidden" role="status"></div><div id="wakeEventChart" class="chart large-chart"></div></div></div>
       <details id="eventProtocol" class="card table-card event-protocol"><summary>Ereignisprotokoll <span class="event-count" id="wakeEventCount">0</span></summary><p class="event-protocol-note">Sleep- und Wake-Phasen auf der Messzeitachse. Wake- oder Hintergrundereignis auswählen, um Rohdaten zu öffnen. Startzeiten seit Protokollbeginn; Kennwerte gültiger Zyklen enthalten gekennzeichnete Ergänzungen kleiner Datenlücken.</p><div class="event-scroll"><table><thead><tr><th scope="col">Phase / Ereignis</th><th scope="col">Startzeit</th><th scope="col">Wake-Periode</th><th scope="col">Dauer</th><th scope="col">Ø Strom</th><th scope="col">Spitzenstrom</th><th scope="col">Ladung</th><th scope="col">Energie</th><th scope="col">D0–D7</th><th scope="col">Daten</th></tr></thead><tbody id="eventRows"></tbody></table></div></details>
       <section class="card table-card sleep-analysis-card detail-sleep" aria-labelledby="detailSleepTitle">
-        <div class="card-title-row"><div><h3 id="detailSleepTitle" class="detail-sleep">Sleep-Auswertung</h3><p id="detailSleepNote"></p></div><button class="secondary" id="batteryFromMeasurement">Batterielaufzeit berechnen</button></div>
+        <div class="card-title-row"><div><h3 id="detailSleepTitle" class="detail-sleep">Sleep-Auswertung</h3><p id="detailSleepNote"></p></div></div>
         <div class="kpi-grid sleep-analysis-kpis">
           <div class="kpi"><span>Erfasste Sleep-Zeit</span><strong id="detailSleepTime">—</strong></div>
           <div class="kpi"><span>Ø Strom · erfasster Sleep</span><strong id="detailSleepCurrent">—</strong></div>
@@ -222,18 +163,16 @@
 <dialog id="measurementDialog" aria-labelledby="measurementDialogTitle">
   <form id="measurementForm" method="dialog">
     <div class="dialog-head"><div><span class="eyebrow" id="measurementDialogEyebrow">NEUE MESSUNG</span><h2 id="measurementDialogTitle">Messung anlegen</h2></div><button type="button" class="icon-btn" data-close-dialog aria-label="Dialog schließen">×</button></div>
+    <fieldset class="measurement-profiles"><legend>Messprofil</legend>
+      <label for="measurementProfileSelect">Gespeicherte Einstellungen<select id="measurementProfileSelect"><option value="">Ohne Messprofil</option></select></label>
+      <p class="form-hint" id="measurementProfileStatus" role="status" aria-live="polite">Ein Profil übernimmt die gespeicherten Werte in das Formular. Du kannst sie anschließend anpassen.</p>
+    </fieldset>
     <fieldset class="measurement-basics"><legend><span class="section-number" aria-hidden="true">1</span> Messung &amp; Gerät</legend><div class="form-grid">
-      <label class="wide">Name<input name="name" id="measurementName" maxlength="160" required value="ULP Sleep / Wake Test"></label>
-      <label>Projekt<input name="project" value="ULP Application"></label><label>Gerät<input name="device" value="Prototype #1"></label>
-      <label>Seriennummer (optional)<input name="serial_number" maxlength="160" placeholder="z. B. SN-00123"></label>
-      <label>Firmware-Version (optional)<input name="firmware" maxlength="160" placeholder="z. B. v1.2.3"></label>
-      <label>Hardware-Version (optional)<input name="hardware_version" maxlength="160" placeholder="z. B. Rev. B"></label>
-    </div><div class="form-grid hardware-settings">
-      <label>PPK2 auswählen<select name="port" id="portSelect" required></select></label>
-      <label>Modus<select name="meter_mode"><option value="source">Source meter</option><option value="ampere">Ampere meter</option></select></label>
-      <label>Spannung [mV]<input name="voltage_mv" type="number" min="800" max="5000" value="3300"></label>
-      <label class="wide">Notiz<textarea name="notes" rows="2" placeholder="Testbedingung, Build, Besonderheiten …"></textarea></label>
+      <label class="wide">Name<input name="name" id="measurementName" maxlength="160" required></label>
+      <label class="wide">Notiz<textarea name="notes" rows="2" maxlength="4000" placeholder="Testbedingung, Build, Besonderheiten …"></textarea></label>
     </div>
+      <div id="measurementFormCustomFields" class="custom-fields"></div>
+      <button type="button" class="add-custom-field" data-add-measurement-field="measurementForm" aria-label="Eigenes Feld hinzufügen" title="Eigenes Feld hinzufügen"><span aria-hidden="true">+</span></button>
     </fieldset>
     <fieldset class="schedule-box"><legend><span class="section-number" aria-hidden="true">2</span> Zeitplanung</legend>
       <div class="schedule-layout">
@@ -272,8 +211,13 @@
         </div>
       </div>
     </fieldset>
+    <fieldset class="measurement-hardware"><legend><span class="section-number" aria-hidden="true">3</span> PPK2 &amp; Versorgung</legend><div class="form-grid hardware-settings">
+      <label>PPK2 auswählen<select name="port" id="portSelect" required></select></label>
+      <label>Modus<select name="meter_mode"><option value="source">Source meter</option><option value="ampere">Ampere meter</option></select></label>
+      <label>Spannung [mV]<input name="voltage_mv" type="number" min="800" max="5000" value="3300" required></label>
+    </div></fieldset>
     <fieldset class="event-settings">
-      <legend><span class="section-number" aria-hidden="true">3</span> Wake / Sleep erkennen</legend>
+      <legend><span class="section-number" aria-hidden="true">4</span> Wake / Sleep erkennen</legend>
       <!-- Keep this selector as the extension point for future reliable detection modes; backend validation must be extended together. -->
       <label>Erkennungsmodus<select name="detection_mode" id="detectionMode"><option value="threshold">Stromschwellen und Mindestdauer</option><option value="spectral_compare">Spektralvergleich (experimentell)</option></select></label>
       <div id="spectralSettings" class="hidden">
@@ -320,7 +264,7 @@
       </div>
     </fieldset>
 
-    <fieldset class="measurement-preview"><legend><span class="section-number" aria-hidden="true">4</span> Messvorschau &amp; Trigger justieren</legend>
+    <fieldset class="measurement-preview"><legend><span class="section-number" aria-hidden="true">5</span> Messvorschau &amp; Trigger justieren</legend>
       <div class="preview-session">
         <div class="preview-intro"><h3>Trigger am Live-Signal abstimmen</h3><p>Stromkurve und FFT des gewählten PPK2 prüfen. Angepasste Schwellen werden oben übernommen und gelten für die spätere Messung.</p></div>
         <div class="preview-toolbar preview-session-actions" role="group" aria-label="Vorschau steuern">
@@ -360,11 +304,21 @@
       </div>
       <details class="preview-guidance"><summary>Hinweise zum Justieren &amp; zur Vorschau</summary><div><p>„Live anhalten“ behält den Ausschnitt zum Justieren. Mit „Live folgen“ richtet sich die Ansicht wieder auf die neuesten Daten aus.</p><p>Parameteränderungen berechnen die letzten 60 s neu; dabei werden Sleep und die FFT-Referenz neu gelernt. Die reguläre Messung beginnt anschließend mit einer neuen Lernphase.</p><p>Die Vorschau speichert keine Messung. Erst „Messung anlegen“ übernimmt die Einstellungen und startet die geplante Aufzeichnung.</p></div></details>
     </fieldset>
-    <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Abbrechen</button><button type="submit" class="primary" id="measurementSubmit">▶ Messung anlegen</button></div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Abbrechen</button><button type="button" class="secondary" id="measurementProfileSave">Einstellungen speichern</button><button type="submit" class="primary" id="measurementSubmit">▶ Messung anlegen</button></div>
   </form>
 </dialog>
 
-<dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATEN</span><h2 id="editDialogTitle">Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit aria-label="Dialog schließen">×</button></div><div class="form-grid"><label class="wide">Name<input name="name" required></label><label>Projekt<input name="project"></label><label>Gerät<input name="device"></label><label>Seriennummer (optional)<input name="serial_number" maxlength="160"></label><label>Firmware-Version (optional)<input name="firmware" maxlength="160"></label><label>Hardware-Version (optional)<input name="hardware_version" maxlength="160"></label><label class="wide">Notiz<textarea name="notes" rows="4"></textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
+<dialog id="measurementProfileDialog" aria-labelledby="measurementProfileDialogTitle">
+  <form id="measurementProfileForm" method="dialog">
+    <div class="dialog-head"><div><span class="eyebrow">MESSPROFIL</span><h2 id="measurementProfileDialogTitle">Einstellungen speichern</h2></div><button type="button" class="icon-btn" data-close-profile-dialog aria-label="Dialog schließen">×</button></div>
+    <label class="profile-name-field" for="measurementProfileName">Profilname<input id="measurementProfileName" maxlength="160" required placeholder="z. B. Sensor · 3,3 V · 5 Wakes" aria-describedby="measurementProfileSaveHint measurementProfileSaveError"></label>
+    <p class="form-hint" id="measurementProfileSaveHint">Speichert die aktuellen Einstellungen und eigenen Felder als Messprofil.</p>
+    <p id="measurementProfileSaveError" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close-profile-dialog>Abbrechen</button><button type="submit" class="primary" id="measurementProfileConfirm">Profil speichern</button></div>
+  </form>
+</dialog>
+
+<dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">METADATEN</span><h2 id="editDialogTitle">Messung bearbeiten</h2></div><button type="button" class="icon-btn" data-close-edit aria-label="Dialog schließen">×</button></div><div class="form-grid"><label class="wide">Name<input name="name" maxlength="160" required></label><label class="wide">Notiz<textarea name="notes" maxlength="4000" rows="4"></textarea></label></div><div id="editFormCustomFields" class="custom-fields"></div><button type="button" class="add-custom-field" data-add-measurement-field="editForm" aria-label="Eigenes Feld hinzufügen" title="Eigenes Feld hinzufügen"><span aria-hidden="true">+</span></button><div class="dialog-actions"><button type="button" class="secondary" data-close-edit>Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="currentChartTooltip" class="current-chart-tooltip hidden" role="tooltip"></div>
 <script src="/static/current-inputs.js?v=1.0.6-threshold-only"></script>
@@ -372,6 +326,7 @@
 <script src="/static/wake-analysis.js?v=1.0.6-detail-cleanup"></script>
 <script src="/static/live-stream.js?v=1.0.6-ui-polish"></script>
 <script src="/static/measurement-preview.js?v=1.0.6-ui-polish"></script>
-<script src="/static/battery-life.js?v=1.0.6-ui-polish"></script>
-<script src="/static/app.js?v=1.0.6-ui-polish"></script>
+<script src="/static/measurement-fields.js?v=1.0.6-compact-fields"></script>
+<script src="/static/measurement-profiles.js?v=1.0.6-profile-name-dialog"></script>
+<script src="/static/app.js?v=1.0.6-profile-name-dialog"></script>
 </body></html>

@@ -4,7 +4,7 @@ from types import SimpleNamespace as Row
 
 import pytest
 
-from app.cycle_energy import confirmed_cycle_energy, project
+from app.cycle_energy import confirmed_cycle_energy
 from app.db import Measurement, OverviewPoint, SleepSegment, WakeEvent
 from app.schemas import MeasurementStartRequest
 from signal_generator import MockPPK, SignalGenerator
@@ -30,9 +30,9 @@ def fixture():
     return events,segments,markers
 
 
-def test_only_complete_cycles_energy_and_weighted_projection():
+def test_only_complete_cycles_energy_and_weighted_current():
     events,segments,markers=fixture()
-    result=confirmed_cycle_energy(10,3300,events,segments,markers,3600)
+    result=confirmed_cycle_energy(10,3300,events,segments,markers)
     assert result['cycle_count']==2 and result['excluded_wake_count']==1
     phases = result['valid_wake_phases']
     assert len(phases) == 2
@@ -51,11 +51,6 @@ def test_only_complete_cycles_energy_and_weighted_projection():
     assert result['counted_duration_s']==pytest.approx(3.6)
     assert result['average_cycle_duration_s']==pytest.approx(1.8)
     assert result['average_combined_power_uw']==pytest.approx(1016*3.3/3.6)
-    for name,days in [('day',1),('week',7),('month',30),('year',365)]:
-        value=result['projections'][name]
-        assert value['combined_energy_uwh']==pytest.approx(22352*days)
-        assert value['combined_energy_uwh']==pytest.approx(value['wake_energy_uwh']+value['sleep_energy_uwh'])
-    assert result['projections']['custom']['combined_energy_uwh']==pytest.approx(931.333333333)
 
 
 @pytest.mark.parametrize('missing', ['wake_start','wake_validated','sleep_validated','sleep_start'])
@@ -64,7 +59,7 @@ def test_missing_confirmation_never_looks_like_zero_energy(missing):
     result=confirmed_cycle_energy(10,3300,events,segments,[p for p in markers if p.kind!=missing])
     assert result['cycle_count']==0
     assert result['average_wake_energy_uwh'] is None
-    assert result['projections']['day']['combined_energy_uwh'] is None
+    assert result['average_combined_power_uw'] is None
 
 
 def test_wake_variability_uses_only_valid_cycles_and_equal_event_weights():
@@ -153,7 +148,7 @@ def test_small_gaps_restore_charge_and_report_estimated_samples():
     assert result['average_wake_current_ua'] == pytest.approx(1000)
     assert result['valid_sleep_phases'][0]['interpolated_samples'] == 32
     assert result['valid_wake_phases'][0]['interpolated_samples'] == 16
-    assert result['projections']['day']['combined_energy_uwh'] == pytest.approx(1004*3.3/2*24)
+    assert result['average_combined_power_uw'] == pytest.approx(1004*3.3/2)
 
 
 @pytest.mark.parametrize('phase', ['sleep','wake'])
@@ -195,12 +190,6 @@ def test_interpolation_absolute_limit_even_with_high_coverage():
     assert result['excluded_cycles_with_gaps'] == 1
 
 
-@pytest.mark.parametrize('duration',[0,-1,float('nan'),float('inf')])
-def test_invalid_custom_duration_rejected(duration):
-    with pytest.raises(ValueError):
-        project({},duration)
-
-
 def test_mock_pipeline_counts_one_cycle_and_excludes_open_wake_and_last_sleep(tmp_path,monkeypatch):
     manager=build_manager(tmp_path)
     manager.settings.sample_rate_hz=1000
@@ -226,7 +215,7 @@ def test_mock_pipeline_counts_one_cycle_and_excludes_open_wake_and_last_sleep(tm
     assert manager.overview(measurement['id'])['analysis']['average_wake_duration_s']==.01
     _, exported=manager.export_metadata_json(measurement['id'])
     assert json.loads(exported)['cycle_energy']==summary
-    assert manager.cycle_energy(measurement['id'],600)['projections']['custom']['duration_s']==600
+    assert manager.cycle_energy(measurement['id'])==summary
 
 
 def test_sleep_only_protocol_reports_no_mean_instead_of_baseline(tmp_path,monkeypatch):

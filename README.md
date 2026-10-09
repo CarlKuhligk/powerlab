@@ -1,5 +1,26 @@
 # PowerLab
 
+Beim Anlegen einer Messung lassen sich benannte **Messprofile** über das Dropdown
+ganz oben auswählen. Ein Profil übernimmt die gespeicherten Formularwerte:
+Messkontext, PPK2, Modus, Spannung, Zeitplanung und Wake-/Sleep-Trigger.
+Die Werte können danach angepasst werden. Neue Messungen ohne Profil beginnen
+unter „Messung & Gerät“ mit den leeren Feldern **Name** und **Notiz**.
+Über **Eigenes Feld hinzufügen** lassen sich frei benannte Angaben ergänzen,
+zum Beispiel Firmware, Seriennummer oder Temperatur. Feldnamen und Werte können
+bearbeitet oder entfernt werden. Sie werden mit der Messung und im Messprofil
+gespeichert und erscheinen in den Messungsdetails, JSON-/Bundle-Exporten und im
+PDF-Messprotokoll. Angaben älterer Messungen bleiben erhalten und werden beim
+Bearbeiten als eigene Felder angezeigt.
+
+Der Button **Einstellungen speichern** zwischen **Abbrechen** und
+**Messung anlegen** öffnet einen Dialog für den Profilnamen. **Profil speichern**
+sichert die aktuelle Konfiguration, ohne eine Messung zu starten;
+Messungsname und angeschlossener PPK2 sind dafür nicht erforderlich.
+Profile bleiben in der lokalen Datenbank auch nach einem Neustart verfügbar.
+Profilnamen müssen eindeutig sein. Gespeicherte feste Start- und Endzeitpunkte
+werden ebenfalls übernommen und müssen bei einer späteren Verwendung angepasst
+werden. Ein fehlender gespeicherter PPK2 muss neu ausgewählt werden.
+
 ## Sleep/Wake-Erkennung
 
 Neue Messungen bestätigen Zustände über **Stromschwellen und Mindestdauer**.
@@ -23,27 +44,6 @@ PowerLab ist eine lokale Mess- und Analyseanwendung für **Nordic Power Profiler
 Die Anwendung arbeitet ausschließlich mit echten PPK2-Geräten. Ein Simulations-/Mock-Treiber ist nicht enthalten.
 
 ## History-Analyse
-
-Die Statistik lässt sich mit einem separat erzeugten Referenzdatensatz prüfen. Der Generator importiert keinen Anwendungscode; seine Sollwerte stammen aus NumPy und `NormalDist`. Ausführen aus dem Projektverzeichnis:
-
-```powershell
-.venv\Scripts\python.exe tests\battery_statistics_generator.py --output .test-tools\battery-statistics-cases.json
-.venv\Scripts\python.exe tests\verify_battery_statistics.py --cases .test-tools\battery-statistics-cases.json --report .test-tools\battery-statistics-verification.md
-```
-
-Der Prüflauf umfasst 126 Fälle und vergleicht die Verarbeitung gültiger Messphasen, Varianzen, Messungsgewichte, Laufzeiten und Perzentile mit den Referenzwerten. Er prüft zusätzlich das JavaScript-Modell und vergleicht die Histogrammanteile mit NumPy und prüft die Min/Max-Grenzen. Die Prüfung bestätigt die Rechenwege, keine kalibrierte Wahrscheinlichkeit der tatsächlichen Batterielaufzeit. Für andere reproduzierbare Daten kann beim Generator `--seed` angegeben werden. Erforderlich sind die Python-Testumgebung und Node.js (alternativ `.test-tools/node.exe`).
-
-Der Menüpunkt **Batterielaufzeit** übernimmt eine oder mehrere abgeschlossene Messungen mit gültigen Sleep-/Wake-Zyklen. Jede Messung repräsentiert ein anderes Gerät. **Mittel** gibt jedem Gerät denselben Einfluss, **Gewichtet** richtet ihn nach der Anzahl gültiger Zyklen, **Eigene Gewichte** erlaubt relative Anteile (z. B. 7 und 3 für 70 % und 30 %). Gewicht 0 hat keinen Einfluss und erweitert keine Grenzen. Batterieenergie und Timing sind frei einstellbar: **Periodendauer** von Wake-Beginn zu Wake-Beginn, **Sleep-Dauer** (auch 24 Stunden) oder **Wake-Duty-Cycle**. Bei fester Periode verkürzt ein längerer Wake die anschließende Sleep-Zeit. Eine Periode unterhalb der längsten gültigen Wake-Dauer wird abgelehnt. Änderungen an Auswahl und Gewichtung behalten die Timing-Einstellung bei.
-
-Das Chart zeigt die statistische Unsicherheit der geschätzten mittleren Laufzeit, nicht dauerhaft wiederholte Einzelzyklen. Die grüne Linie steht bei Batterieenergie / mittlerer Leistung. Eine lognormale Näherung auf Basis linearer Unsicherheitsfortpflanzung auf der logarithmischen Laufzeitskala zeigt die Dichte; P5–P95 begrenzen ein näherungsweises 90-%-Intervall. Die x-Achse zeigt Tage, Wochen, Monate oder Jahre, die y-Achse Dichte in Prozent pro Laufzeiteinheit. Der gezeichnete Bereich umfasst ±4 logarithmische Standardunsicherheiten, keine harten Min/Max-Grenzen. Der Median der Näherung entspricht der zentralen Laufzeitschätzung.
-
-Je Gerät ist der Sleep-Strom gesamte gültige Sleep-Ladung / gesamte gültige Sleep-Dauer. Periodische Peaks bleiben im Verbrauch enthalten; Unterschiede zwischen einzelnen Sleep-Abschnitten erzeugen im Laufzeitmodell keinen eigenen Unsicherheitsbeitrag. Wake-Dauer und Wake-Energie bleiben gepaart. Verbrauch und Dauer werden zunächst je Gerät unter der gewählten Timing-Regel berechnet und dann gewichtet kombiniert. So bleiben auch Zusammenhänge zwischen dem Sleep-Verbrauch eines Geräts und seiner Wake-Dauer erhalten.
-
-Die Mittelwertunsicherheit enthält getrennte Beiträge: Wake-Schätzunsicherheit innerhalb eines Geräts (Varianz der linearisierten Beiträge / Zyklusanzahl) und Unterschiede zwischen Gerätemittelwerten. Die beobachtete zwischen-Geräte-Varianz wird um bereits enthaltene Wake-Schätzunsicherheit korrigiert und bei null begrenzt; beide Beiträge werden mit quadrierten Geräteanteilen fortgepflanzt. Mehr Zyklen reduzieren den Wake-Schätzfehler, nicht dauerhafte Geräteunterschiede. Ein separater Bereich zeigt die Streuung und beobachtete gewichtete P5/P95 der aus den Gerätemittelwerten berechneten Laufzeiten. Diese Perzentile sind kein Prognoseintervall für weitere Geräte. Details und Formeln: [BATTERY_ANALYSIS.md](BATTERY_ANALYSIS.md).
-
-Das Modell setzt unabhängige, repräsentative Wakes und unabhängige Geräte unter vergleichbaren Bedingungen voraus. Sleep-Messungen müssen genügend Peak-Perioden für einen repräsentativen Mittelwert enthalten. Mindestens zwei gültige Zyklen je aktivem Gerät sind für die Mittelwertunsicherheit nötig; mindestens zwei aktive Geräte für Gerätestreuung. Mit einem Gerät gilt das Unsicherheitsintervall nur für dieses Gerät. Bei wenigen Geräten oder großer relativer Unsicherheit ist die Delta-/Lognormal-Näherung eingeschränkt; das 90-%-Intervall ist keine garantierte Prognose. Zeitliche Abhängigkeiten, unsichere Messungsanteile, systematische Messfehler, Batterieunsicherheit, Selbstentladung, Alterung und Zustandsänderungen sind nicht enthalten. In der Tabelle beschreiben Wake-Varianzen Einzelzyklen und Sleep-Varianzen Gerätemittelwerte. Grundlage: [NIST TN 1297, Unsicherheitsfortpflanzung mit Kovarianzen](https://www.nist.gov/pml/nist-technical-note-1297/nist-tn-1297-appendix-law-propagation-uncertainty).
-
-**PDF-Bericht herunterladen** erstellt ein druckfertiges Laufzeitprotokoll. Die erste A4-Seite zeigt Laufzeit, näherungsweises 90-%-Intervall, mittlere Leistung, Batterie- und Timing-Einstellungen sowie ein weißes Vektordiagramm. Messgrundlage, Gerätegewichte, Sleep-Strom je Gerät sowie Tabellen zu Wake-Dauer, Wake-Energie, Sleep-Strom und Sleep-Leistung folgen auf der zweiten Seite. Sleep-Mittelwert, Minimum, Maximum, Standardabweichung, Varianz und relative Streuung beziehen sich auf die Gerätemittelwerte; Sleep-Energie wird nicht als Vergleichsgröße ausgegeben. Gerätestreuung der Laufzeiten und Mittelwertunsicherheit sind getrennt dokumentiert. Umfangreiche Messungslisten erhalten weitere Seiten. Diagramm und Zahlen werden gemeinsam serverseitig aus den gespeicherten Messungen berechnet (Matplotlib und Typst). Der Erstellungszeitpunkt steht auf jeder Seite in der über `TZ` konfigurierten Zeitzone (Standard: `Europe/Berlin`), einschließlich UTC-Abstand. Im Dateinamen bleibt derselbe Zeitpunkt in UTC (`Z`), beispielsweise `battery_life_combined_2026-10-07_13-14-15_123456Z.pdf`. Ausführliche Erläuterungen sind im Tool über aufklappbare Hilfen erreichbar, insbesondere „Berechnung und Annahmen“. API: `POST /api/battery-report`, Modi `period`, `sleep` und `duty`; der Einzelmessungs-Export unter `POST /api/measurements/{id}/battery-report` bleibt verfügbar. Ein Browser-PNG ist nicht mehr erforderlich; bestehende Clients dürfen es weiterhin mitsenden, es wird validiert und durch das berechnete Druckdiagramm ersetzt.
 
 Ein eigener Bereich **Sleep-Auswertung** in den Messungsdetails und im PDF-Messprotokoll zeigt erfasste Sleep-Zeit, Strom, Ladung und Energie einschließlich zugeordneter Hintergrundereignisse. Diese Kennwerte berücksichtigen gespeicherte Sleep-Daten auch ohne vollständigen Wake-Zyklus und ergänzen keine Datenlücken. Eine separate Tabelle zeigt die Sleep-Phasen aus gültigen Zyklen samt Kennzeichnung ergänzter Datenlücken. Gespeicherte Sleep-Abschnitte sind Speicher-Checkpoints und werden nicht als eigene Phasen gezählt. JSON-Exporte und Bundle-Metadaten enthalten denselben Bereich unter `sleep_analysis`. Das PDF enthält außerdem die Varianz, Standardabweichung und relative Streuung der gültigen Wake-Zustände.
 
@@ -250,7 +250,7 @@ MEZ/CET (UTC+01:00), im Sommer MESZ/CEST (UTC+02:00). Über
 einstellen; Compose übergibt `TZ` an das Betriebssystem und die Anwendung.
 Die PDF-Anzeige wird ausdrücklich
 umgerechnet und hängt dadurch nicht von der Host-Zeitzone ab. Datenbank,
-API-Zeitstempel und Zeitstempel im Batterie-PDF-Dateinamen bleiben in UTC (`Z`).
+API-Zeitstempel bleiben in UTC (`Z`).
 Zum Übernehmen der Änderungen `docker compose up -d --build` ausführen und
 die PDFs neu exportieren. Die Containerzeit lässt sich mit
 `docker compose exec powerlab date '+%Y-%m-%d %H:%M:%S %Z %z'` prüfen.

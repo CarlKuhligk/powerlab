@@ -1,24 +1,27 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from . import __version__
 from .config import Settings, get_settings
-from .db import Database
+from .db import Database, MeasurementProfile
 from .manager import MeasurementManager
 from .schemas import MarkerRequest, MeasurementBulkExportRequest, MeasurementPatchRequest, MeasurementStartRequest
-from .schemas import MeasurementPreviewRequest
-from .schemas import BatteryReportRequest, BatteryMultiReportRequest
+from .schemas import MeasurementPreviewRequest, MeasurementProfileRequest
 from .live_stream import LiveSubscription
 from .storage.raw_store import RawStore
 from .storage.event_reader import RawDataLimitError
@@ -77,6 +80,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/devices")
     def devices():
         return {"ppk2": mgr().devices_status()}
+
+    def profile_dict(profile: MeasurementProfile) -> dict:
+        return {"id": profile.id, "name": profile.name,
+                "settings": json.loads(profile.settings_json),
+                "created_at": profile.created_at.replace(tzinfo=timezone.utc)
+                if profile.created_at.tzinfo is None else profile.created_at}
+
+    @app.get("/api/measurement-profiles")
+    def measurement_profiles():
+        with db.session() as session:
+            return [profile_dict(profile) for profile in session.scalars(
+                select(MeasurementProfile).order_by(MeasurementProfile.name, MeasurementProfile.id)
+            )]
+
+    @app.post("/api/measurement-profiles", status_code=201)
+    def save_measurement_profile(body: MeasurementProfileRequest):
+        profile = MeasurementProfile(id=str(uuid4()), name=body.name,
+                                     settings_json=body.settings.model_dump_json())
+        try:
+            with db.session() as session:
+                session.add(profile)
+                session.flush()
+                result = profile_dict(profile)
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409,
+                                detail="Ein Messprofil mit diesem Namen existiert bereits.") from exc
+        return result
 
     @app.websocket("/ws/devices")
     async def devices_ws(websocket: WebSocket):
@@ -338,40 +368,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Response(status_code=204)
 
     @app.get('/api/measurements/{measurement_id}/cycle-energy')
-    def measurement_cycle_energy(measurement_id: str,
-                                duration_s: float | None = Query(default=None, gt=0, le=31_536_000_000, allow_inf_nan=False)):
+    def measurement_cycle_energy(measurement_id: str):
         try:
-            return mgr().cycle_energy(measurement_id, duration_s)
+            return mgr().cycle_energy(measurement_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail='Measurement not found') from exc
-
-    @app.post('/api/battery-report')
-    def battery_multi_report(payload: BatteryMultiReportRequest):
-        from .battery_report import render_multi_report, report_filename
-        generated_at = datetime.now(timezone.utc)
-        try:
-            measurements = [mgr().get_measurement(s.measurement_id) for s in payload.sources]
-            body = render_multi_report(measurements, payload, generated_at=generated_at, timezone_name=settings.timezone)
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail='Measurement not found') from error
-        except ValueError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        return Response(body, media_type='application/pdf', headers={
-            'Content-Disposition': f'attachment; filename="{report_filename(generated_at)}"'})
-
-    @app.post('/api/measurements/{measurement_id}/battery-report')
-    def battery_report(measurement_id: str, payload: BatteryReportRequest):
-        from .battery_report import render_report, report_filename
-        generated_at = datetime.now(timezone.utc)
-        try:
-            measurement = mgr().get_measurement(measurement_id)
-            body = render_report(measurement, measurement['cycle_energy'], payload, generated_at=generated_at, timezone_name=settings.timezone)
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail='Measurement not found') from error
-        except ValueError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        return Response(body, media_type='application/pdf', headers={
-            'Content-Disposition': f'attachment; filename="{report_filename(generated_at, measurement_id)}"'})
 
     @app.get("/api/measurements/{measurement_id}/overview")
     async def measurement_overview(

@@ -2,11 +2,12 @@
 
 ## Unreleased
 
+- Removed the battery lifetime calculator, runtime projections, battery PDF exports, related assets, API schemas, validation tooling and the Matplotlib dependency. Measured Sleep/Wake statistics remain available.
+
 - Measurement creation and editing offer optional DUT serial number, firmware version and hardware version. Values are stored with scheduled and immediate measurements and included in details, search, PDF protocols and JSON/bundle metadata. Existing SQLite databases gain the new fields automatically.
 
-- Docker and PDF reports default to Europe/Berlin, configurable with TZ. Absolute PDF timestamps include the date-specific CET/CEST abbreviation and UTC offset, with automatic daylight-saving changes. Storage, API timestamps and battery-report filenames retain UTC.
+- Docker and PDF reports default to Europe/Berlin, configurable with TZ. Absolute PDF timestamps include the date-specific CET/CEST abbreviation and UTC offset, with automatic daylight-saving changes. Storage and API timestamps retain UTC.
 
-- Battery analysis treats each measurement as a device: duration-weighted Sleep current includes periodic peaks, paired Wake duration/energy variability remains, and device differences contribute separately to mean-runtime uncertainty. Calculator and PDF show device runtime scatter and Sleep-current mean/min/max/standard deviation/variance/CV. Configurable fixed Wake-to-Wake period subtracts each Wake duration from Sleep; fixed Sleep and duty modes remain available. Independent Python/browser references cover all three timing modes.
 - Storage now uses SQLite and Parquet exclusively; the optional time-series mirror, its service, configuration, dependency, scripts and status display have been removed.
 - Active measurements now start with sample-weighted means and a subtle Min/Max band instead of joining alternating extrema. Mergeable sum/count/extrema summaries are computed before preview reduction and compacted in aligned time buckets. The chart budget follows its width; narrow zooms load available wake raw data, and returning to live follow restores the overview. Actual device gaps remain separate polygons and line segments.
 - Wake raw files are written in bounded blocks during acquisition; open wakes no longer accumulate a full RAM copy or require bulk compression on stop. Device stop precedes file finalization, queued received samples are preserved, and stop runs off the async API event loop with visible pending status.

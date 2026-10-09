@@ -4,7 +4,6 @@ import math
 from statistics import mean, variance
 
 
-PERIODS = {'day': 86400, 'week': 7 * 86400, 'month': 30 * 86400, 'year': 365 * 86400}
 MAX_INTERPOLATED_PHASE_S = .010
 MAX_INTERPOLATED_PHASE_FRACTION = .001
 
@@ -34,16 +33,7 @@ def _phase_variability(cycles, voltage, phase):
     return result
 
 
-def project(summary, duration_s):
-    if not math.isfinite(duration_s) or duration_s <= 0:
-        raise ValueError('Projection duration must be finite and positive')
-    return {'duration_s': duration_s, **{
-        f'{kind}_energy_uwh': summary[f'average_{kind}_power_uw'] * duration_s / 3600
-        if summary[f'average_{kind}_power_uw'] is not None else None
-        for kind in ('wake', 'sleep', 'combined')}}
-
-
-def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, markers, custom_duration_s=None):
+def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, markers):
     times = {kind: sorted({int(p.sample_index) for p in markers if p.kind == kind})
              for kind in ('sleep_start', 'sleep_validated', 'wake_start', 'wake_validated')}
     starts = times['sleep_start']
@@ -154,9 +144,7 @@ def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, mark
               'average_wake_power_uw': wake_charge * voltage / duration if duration else None,
               'average_sleep_power_uw': sleep_charge * voltage / duration if duration else None,
               'average_combined_power_uw': (wake_charge + sleep_charge) * voltage / duration if duration else None,
-              'wake_duty_cycle_pct': wake_s / duration * 100 if duration else None,
-              'assumption': 'Observed complete cycles repeat at the measured voltage; month=30 days, year=365 days.'}
-    result['projections'] = {name: project(result, seconds) for name, seconds in PERIODS.items()}
+              'wake_duty_cycle_pct': wake_s / duration * 100 if duration else None}
     result['wake_variability'] = _phase_variability(cycles, voltage, 'wake')
     result['sleep_variability'] = _phase_variability(cycles, voltage, 'sleep')
     result['valid_wake_phases'] = [
@@ -173,6 +161,4 @@ def confirmed_cycle_energy(sample_rate, voltage_mv, events, sleep_segments, mark
          'charge_uc': c['sleep_charge_uc'], 'energy_uwh': c['sleep_charge_uc'] * voltage / 3600,
          'interpolated_samples': c['sleep_interpolated_samples']}
         for c in cycles]
-    if custom_duration_s is not None:
-        result['projections']['custom'] = project(result, custom_duration_s)
     return result

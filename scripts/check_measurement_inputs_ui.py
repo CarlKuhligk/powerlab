@@ -27,6 +27,8 @@ def main():
                 request.fulfill(path=str(ROOT / "app" / path.lstrip("/")), content_type="application/javascript; charset=utf-8" if path.endswith(".js") else "text/css; charset=utf-8")
             elif path == "/api/system":
                 request.fulfill(json={"sample_rate_hz": 100000, "sample_period_us": 10, "data_dir": "data"})
+            elif path == "/api/measurement-profiles":
+                request.fulfill(json=[])
             elif path == "/api/measurements":
                 if request.request.method == "POST":
                     payload = request.request.post_data_json
@@ -55,13 +57,13 @@ def main():
             for _ in range(2):
                 page.locator("#newMeasurementBtn").click()
                 page.wait_for_selector("#measurementDialog[open]")
-                for name in ["serial_number", "firmware", "hardware_version"]:
+                for name in ["name", "notes"]:
                     field = page.locator(f"#measurementForm [name='{name}']")
                     assert field.input_value() == "", name
-                    assert not field.evaluate("el=>el.required"), name
+                    assert field.evaluate("el=>el.required") == (name == "name"), name
                 for selector in ["#startAtLabel", "#durationLabel", "#endAtLabel", "#eventCountLabel"]:
                     assert not page.locator(selector).is_visible(), f"Inactive field visible: {selector}"
-                for name in ["name", "project", "device", "serial_number", "firmware", "hardware_version", "notes"]:
+                for name in ["name", "notes"]:
                     field = page.locator(f"#measurementForm [name='{name}']")
                     field.fill("")
                     field.click()
@@ -96,28 +98,33 @@ def main():
                 page.locator("#measurementForm .dialog-actions [data-close-dialog]").click()
             # Submit through the real form and restore the fields when editing a plan.
             page.locator("#newMeasurementBtn").click()
-            values = {"serial_number": "0000123", "firmware": "v1.2.3", "hardware_version": "Rev. B"}
+            page.locator("#measurementName").fill("Metadata test")
+            values = {"Seriennummer": "0000123", "Firmware-Version": "v1.2.3", "Hardware-Version": "Rev. B"}
             for name, value in values.items():
-                page.locator(f"#measurementForm [name='{name}']").fill(value)
+                page.locator('[data-add-measurement-field="measurementForm"]').click()
+                row = page.locator('#measurementFormCustomFields .custom-field-row').last
+                row.locator('[data-field-label]').fill(name)
+                row.locator('[data-field-value]').fill(value)
             page.locator("#startMode").select_option("scheduled")
             page.locator("#scheduledStartAt").fill("2027-01-01T12:00")
             page.locator("#measurementSubmit").click()
             page.wait_for_selector("#measurementDialog", state="hidden")
             page.wait_for_selector("#sessionView:not(.hidden)")
-            assert all(writes[-1][key] == value for key, value in values.items())
-            assert "SN: 0000123" in page.locator("#sessionMeta").inner_text()
+            assert writes[-1]['custom_fields'] == [{'label': name, 'value': value} for name, value in values.items()]
+            assert "Seriennummer: 0000123" in page.locator("#sessionMeta").inner_text()
             page.locator("#editScheduledBtn").click()
-            for name, value in values.items():
-                assert page.locator(f"#measurementForm [name='{name}']").input_value() == value
-            page.locator("#measurementForm [name='hardware_version']").fill("Rev. C")
+            for index, (name, value) in enumerate(values.items()):
+                row = page.locator('#measurementFormCustomFields .custom-field-row').nth(index)
+                assert row.locator('[data-field-label]').input_value() == name
+                assert row.locator('[data-field-value]').input_value() == value
+            page.locator('#measurementFormCustomFields .custom-field-row').last.locator('[data-field-value]').fill('Rev. C')
             page.locator("#measurementSubmit").click()
             page.wait_for_selector("#measurementDialog", state="hidden")
-            assert writes[-1]["hardware_version"] == "Rev. C"
-            assert writes[-1]["serial_number"] == values["serial_number"]
-            assert writes[-1]["firmware"] == values["firmware"]
+            values['Hardware-Version'] = 'Rev. C'
+            assert writes[-1]['custom_fields'] == [{'label': name, 'value': value} for name, value in values.items()]
         assert not errors, errors
         browser.close()
-    print("Measurement inputs, optional device metadata submission/restoration, focus during device/live updates, scheduling visibility and reopening passed on desktop and mobile.")
+    print("Name/Notiz defaults, custom metadata submission/restoration, focus during device/live updates, scheduling visibility and reopening passed on desktop and mobile.")
 
 
 if __name__ == "__main__":

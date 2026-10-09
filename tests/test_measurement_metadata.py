@@ -54,8 +54,10 @@ def test_optional_device_metadata_survives_edit_restart_and_exports(tmp_path, de
         assert response.status_code == 200
         with pymupdf.open(stream=response.content, filetype="pdf") as document:
             text = " ".join(page.get_text() for page in document)
-            for label in ("Seriennummer", "Firmware-Version", "Hardware-Version"):
-                assert label in text
+            for key, label in [("serial_number", "Seriennummer"), ("firmware", "Firmware-Version"),
+                               ("hardware_version", "Hardware-Version")]:
+                if device_fields.get(key):
+                    assert label in text
             for value in device_fields.values():
                 assert value in text
         # A partial metadata edit must preserve the other optional values.

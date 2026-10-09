@@ -25,6 +25,17 @@ class Base(DeclarativeBase):
     pass
 
 
+class MeasurementProfile(Base):
+    __tablename__ = "measurement_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True)
+    settings_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class Measurement(Base):
     __tablename__ = "measurements"
 
@@ -36,6 +47,7 @@ class Measurement(Base):
     firmware: Mapped[str] = mapped_column(String(160), default="", index=True)
     hardware_version: Mapped[str] = mapped_column(String(160), default="", server_default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    custom_fields_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
 
     driver: Mapped[str] = mapped_column(String(32), default="ppk2")
     port: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -177,6 +189,7 @@ class Database:
             if "ppk2_config_json" not in columns:
                 conn.execute(text("ALTER TABLE measurements ADD COLUMN ppk2_config_json TEXT DEFAULT '{}'") )
             additions = {
+                "custom_fields_json": "TEXT NOT NULL DEFAULT '[]'",
                 "serial_number": "VARCHAR(160) NOT NULL DEFAULT ''",
                 "hardware_version": "VARCHAR(160) NOT NULL DEFAULT ''",
                 "scheduled_start_at": "DATETIME",

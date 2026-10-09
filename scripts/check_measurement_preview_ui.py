@@ -52,6 +52,8 @@ def main():
                 request.fulfill(json=devices)
             elif path == '/api/system':
                 request.fulfill(json={'sample_rate_hz': 1000, 'sample_period_us': 1000, 'data_dir': 'data'})
+            elif path == '/api/measurement-profiles':
+                request.fulfill(json=[])
             elif path == '/api/measurement-previews' and method == 'POST':
                 body = request.request.post_data_json
                 calls.append(('preview-start', body))
@@ -139,6 +141,7 @@ def main():
         page.locator('#measurementPreviewCurrent').screenshot(path=str(output))
         page.locator('#measurementPreviewFft').screenshot(path=str(ROOT / 'data/measurement-preview-fft.png'))
         # Saving releases the preview before reserving the device for a real measurement.
+        page.locator('#measurementName').fill('Preview test')
         page.select_option('#startMode', 'scheduled')
         page.evaluate("document.getElementById('scheduledStartAt').value=localInput(new Date(Date.now()+3600000))")
         page.click('#measurementSubmit')

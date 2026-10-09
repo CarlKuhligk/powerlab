@@ -188,10 +188,9 @@ def test_raw_only_api_preserves_every_sample_and_never_falls_back(tmp_path):
         assert client.get(url).status_code==413
         assert client.get(url+'&start_s=0&end_s=2').status_code==413
         # Reject oversized requests instead of substituting a lossy preview.
-        assert client.get('/api/measurements/large/cycle-energy?duration_s=3600').status_code==200
+        assert client.get('/api/measurements/large/cycle-energy').status_code==200
         assert client.get('/api/measurements/large/cycle-energy').json()['cycle_count']==0
         assert client.get('/api/measurements/missing/cycle-energy').status_code==404
-        assert client.get('/api/measurements/large/cycle-energy?duration_s=0').status_code==422
 
 
 def test_paged_raw_api_retains_all_samples_without_boundary_rounding_loss(tmp_path):

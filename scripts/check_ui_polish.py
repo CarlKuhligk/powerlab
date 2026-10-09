@@ -141,9 +141,6 @@ def main():
                 assert colors == ["rgb(131, 217, 188)", "rgb(223, 166, 198)", "rgb(174, 189, 205)", "rgb(197, 169, 245)"], colors
                 assert page.locator("#detailSleepTitle").evaluate("el => getComputedStyle(el).color") == "rgb(96, 165, 250)"
                 assert page.locator("#detailWakeAnalysisTitle").evaluate("el => getComputedStyle(el).color") == "rgb(245, 189, 91)"
-            if view == "battery":
-                colors = page.locator(".battery-chart-card .battery-result-grid strong").evaluate_all("els => els.map(el => getComputedStyle(el).color)")
-                assert colors == ["rgb(142, 231, 170)", "rgb(110, 168, 254)", "rgb(142, 231, 170)"], colors
             assert not errors, errors
             if width in (390, 1440):
                 if not dialog:
@@ -189,11 +186,6 @@ def main():
             page.locator("#eventRows .event-open").first.click()
             page.wait_for_function("document.getElementById('wakeEventChart').data?.length > 0")
             check("event", width)
-            page.locator(".nav[data-view=battery]").click()
-            page.wait_for_function("document.getElementById('batteryChart').data?.length > 0")
-            page.locator('[data-battery-select="sensor-b"]').check()
-            page.wait_for_function("document.getElementById('batterySelectionCount').textContent.startsWith('2 ')")
-            check("battery", width)
             page.locator("#newMeasurementBtn").click()
             page.wait_for_selector("#measurementDialog[open]")
             check("new", width, dialog=True)
