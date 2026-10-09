@@ -10,8 +10,8 @@ const MeasurementPreview=(()=>{
     const settings=measurementPayload(),out={};
     fields.forEach(n=>out[n]=settings[n]);
     if(!out.port)throw new Error('Bitte zuerst einen PPK2 auswählen.');
-    if(fields.filter(n=>!['port','meter_mode','detection_mode'].includes(n)).some(n=>!Number.isFinite(out[n])))throw new Error('Bitte gültige Triggerwerte eingeben.');
-    if(out.sleep_threshold_ua<=0||out.wake_threshold_ua<=out.sleep_threshold_ua)throw new Error('Wake muss höher als Sleep sein; beide Stromschwellen müssen positiv sein.');
+    if(fields.filter(n=>!['port','meter_mode','detection_mode'].includes(n)).some(n=>!Number.isFinite(out[n])))throw new Error('Gültige Triggerparameter eingeben.');
+    if(out.sleep_threshold_ua<=0||out.wake_threshold_ua<=out.sleep_threshold_ua)throw new Error('Die Wake-Schwelle muss über der Sleep-Schwelle liegen. Beide Stromschwellen müssen positiv sein.');
     return out;
   }
   function controls(){
@@ -59,7 +59,7 @@ const MeasurementPreview=(()=>{
       await updateChain.catch(()=>{});
       if(id)await api(`/api/measurement-previews/${id}`,{method:'DELETE'});
       const socket=ws;ws=null;socket?.close();id=null;frame=null;lastRequestedKey=null;updateError=null;
-      status('Vorschau verwendet den gewählten PPK2. Daten bleiben vorübergehend; erst „Messung anlegen“ speichert eine Messung.');
+      status('Die Vorschau erfasst temporäre Daten des ausgewählten PPK2. Mit „Messung anlegen“ wird die Konfiguration für die Aufzeichnung übernommen.');
     })();
     controls();
     try{await stopTask;}finally{stopTask=null;controls();}
@@ -77,7 +77,7 @@ const MeasurementPreview=(()=>{
     if(frame&&(settings.port!==frame.settings.port||settings.meter_mode!==frame.settings.meter_mode||settings.voltage_mv!==frame.settings.voltage_mv))throw new Error('Gerät, Modus oder Spannung geändert. Bitte die Vorschau neu starten.');
     if(requestedKey===lastRequestedKey&&!updateError)return updateChain;
     lastRequestedKey=requestedKey;updateError=null;
-    status('Trigger werden mit den letzten 60 Sekunden neu berechnet …');
+    status('Triggerparameter werden anhand der letzten 60 s erneut ausgewertet …');
     updateChain=updateChain.catch(()=>{}).then(async()=>{
       try{await api(`/api/measurement-previews/${previewId}`,{method:'PATCH',body:JSON.stringify(settings)});}
       catch(error){updateError=error;status(error.message);throw error;}
@@ -92,7 +92,7 @@ const MeasurementPreview=(()=>{
     if(['port','meter_mode','voltage_mv'].includes(name)){
       stop().then(()=>status('Geräteeinstellungen geändert. Vorschau mit den neuen Werten starten.')).catch(error=>status(error.message));return;
     }
-    status('Einstellungen geändert · Trigger werden neu berechnet …');queueRender();
+    status('Messparameter geändert · Erkennung wird neu ausgewertet …');queueRender();
     clearTimeout(updateTimer);
     updateTimer=setTimeout(()=>{try{flushUpdate().catch(()=>{});}catch(error){status(error.message);}},400);
   }
@@ -183,8 +183,8 @@ const MeasurementPreview=(()=>{
     }
     const spectralStatus=data.spectral_comparison;
     if(token!==generation)return;
-    status(data.error||(!matches?'Einstellungen geändert · Trigger werden neu berechnet …':
-      `${data.paused?'Angehalten':'Live'} · Stromdetektor: ${data.state}${spectralStatus?` · FFT: ${spectralStatus.state}${spectralStatus.score_db==null?` (${Math.round(spectralStatus.training_s)}/${spectralStatus.reference_s} s Referenz)`:` (${spectralStatus.score_db.toFixed(1)} dB)`}`:''} · ${markers.filter(m=>m.kind==='wake_validated').length} bestätigte Wake-Trigger im sichtbaren Bereich`));
+    status(data.error||(!matches?'Messparameter geändert · Erkennung wird neu ausgewertet …':
+      `${data.paused?'Angehalten':'Live'} · Zustandserkennung: ${data.state}${spectralStatus?` · FFT: ${spectralStatus.state}${spectralStatus.score_db==null?` (${Math.round(spectralStatus.training_s)}/${spectralStatus.reference_s} s Referenz)`:` (${spectralStatus.score_db.toFixed(1)} dB)`}`:''} · ${markers.filter(m=>m.kind==='wake_validated').length} bestätigte Wake-Trigger im sichtbaren Bereich`));
   }
   async function queueRender(){
     pendingRender=true;if(rendering)return;

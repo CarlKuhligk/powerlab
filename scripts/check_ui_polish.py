@@ -103,6 +103,8 @@ def main():
                 request.fulfill(json={"sample_rate_hz": 100000, "sample_period_us": 10})
             elif path == "/api/live":
                 request.fulfill(json=live)
+            elif path == "/api/measurement-profiles":
+                request.fulfill(json=[])
             elif path == "/api/measurements":
                 request.fulfill(json=measurements)
             elif path.endswith("/cycle-energy"):
@@ -134,7 +136,7 @@ def main():
             assert all(i["width"] == 18 and i["height"] == 18 and i["radius"] == "50%" for i in icons), (view, width, icons)
             if view == "new":
                 colors = page.locator("#measurementForm fieldset > legend").evaluate_all("els => els.map(el => getComputedStyle(el).color)")
-                assert colors == ["rgb(163, 206, 248)", "rgb(237, 203, 150)", "rgb(200, 183, 242)", "rgb(142, 231, 170)"], colors
+                assert colors == ["rgb(195, 178, 246)", "rgb(163, 206, 248)", "rgb(237, 203, 150)", "rgb(163, 206, 248)", "rgb(200, 183, 242)", "rgb(142, 231, 170)"], colors
                 assert len(icons) >= 6, "Measurement help controls missing"
             if view == "detail":
                 colors = page.locator(".metric-group h3").evaluate_all("els => els.map(el => getComputedStyle(el).color)")

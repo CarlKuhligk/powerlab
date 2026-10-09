@@ -1,4 +1,8 @@
 #let report = json(bytes(sys.inputs.report))
+#let status-label = (created: "Angelegt", scheduled: "Geplant", starting: "Startet",
+  recording: "Aufzeichnung", running: "Aufzeichnung", stopping: "Wird beendet",
+  completed: "Abgeschlossen", failed: "Fehlgeschlagen", cancelled: "Abgebrochen",
+  no_sleep: "Keine Sleep-Phase bestätigt").at(report.status, default: report.status)
 #let accent = rgb("145c72")
 #set document(title: "Messprotokoll – " + report.name, author: "PowerLab")
 #set text(font: ("Arial", "DejaVu Sans"), size: 9pt, lang: "de")
@@ -18,7 +22,7 @@
 #parbreak()
 #text(size: 15pt, weight: "bold")[#report.name]
 #parbreak()
-Status: #report.status #h(1fr) Erstellt: #report.generated
+Status: #status-label #h(1fr) Erstellt: #report.generated
 #if report.status != "completed" {
   block(fill: rgb("fff2d9"), inset: 8pt, width: 100%)[
     Diese Messung ist nicht regulär abgeschlossen. Ergebnisse können unvollständig sein.
@@ -27,38 +31,38 @@ Status: #report.status #h(1fr) Erstellt: #report.generated
 #if report.error != "" { block(inset: 8pt, fill: rgb("fff2d9"))[Abbruchgrund: #report.error] }
 = Messkontext
 #rows-table(report.context)
-== Notizen
+== Prüfbedingungen und Anmerkungen
 #report.notes
 = Messaufbau und Erkennung
 #rows-table(report.setup)
 #pagebreak()
 = Messergebnisse
 #rows-table(report.results)
-Die Kennwerte entsprechen der gespeicherten History-Auswertung. Bei Schwellen-Erkennung
-beziehen sich die Sleep/Wake-Mittelwerte, Periodendauer und Duty-Cycle auf vollständig
+Die Kennwerte entsprechen der Auswertung der archivierten Messdaten. Bei Schwellen-Erkennung
+beziehen sich die Sleep/Wake-Mittelwerte, Periodendauer und Wake-Zeitanteil auf vollständig
 bestätigte Zyklen. Fehlende Kennwerte sind mit „—“ gekennzeichnet.
 Die Energie wird aus der Gesamtladung und der konfigurierten Spannung berechnet;
 eine separate Spannungsmessung erfolgt nicht.
 = Sleep-Auswertung
 #rows-table(report.sleep_results)
 Die erfassten Sleep-Kennwerte enthalten alle gespeicherten Sleep-Abschnitte einschließlich
-zugeordneter Hintergrundereignisse. Die Sleep-Zeit zählt empfangene Samples;
+zugeordneter Hintergrundereignisse. Die Sleep-Zeit berücksichtigt empfangene Messwerte;
 Datenlücken werden hier nicht ergänzt. Auch Sleep ohne vollständigen Wake-Zyklus wird berücksichtigt.
-Gespeicherte Abschnitte sind Speicher-Checkpoints und können zu derselben Sleep-Phase gehören.
+Gespeicherte Teilabschnitte können zu derselben Sleep-Phase gehören und werden nicht als zusätzliche Phasen gezählt.
 == Sleep-Phasen aus gültigen Zyklen
 Diese Phasen stammen ausschließlich aus vollständig bestätigten Sleep → Wake → Sleep-Zyklen.
 Kleine zulässige Datenlücken werden wie in der Zyklusauswertung ergänzt und gekennzeichnet.
-Die Nummer bezeichnet den anschließenden Wake; Startzeiten liegen auf der Protokollzeitachse.
+Die Nummer bezeichnet die anschließende Wake-Phase; Startzeiten liegen auf der Protokollzeitachse.
 #if report.sleep_phases.len() == 0 { [Keine Sleep-Phase aus einem gültigen Zyklus verfügbar.] } else {
   set text(size: 7.5pt)
   rows-table(report.sleep_phases, headers: ("Vor Wake", "Beginn", "Dauer", "Ø Strom", "Ladung", "Energie", "Daten"),
     columns: (0.65fr, 1fr, 1fr, 1fr, 1fr, 1fr, 0.9fr))
 }
 = Varianz der gültigen Wake-Zustände
-#report.wake_variability_count gültige Wakes aus vollständig bestätigten Zyklen.
-Jeder Wake zählt gleich. Die Stichprobenvarianz verwendet n − 1 und benötigt mindestens
-zwei Wakes. Relative Streuung = Standardabweichung / Betrag des Mittelwerts;
-bei Mittelwert null bleibt sie leer.
+#report.wake_variability_count gültige Wake-Phasen aus vollständig bestätigten Zyklen.
+Jede Wake-Phase wird gleich gewichtet. Die Stichprobenvarianz verwendet n − 1 und benötigt mindestens
+zwei Wake-Phasen. Relative Streuung = Standardabweichung / Betrag des Mittelwerts;
+bei einem Mittelwert von null ist sie nicht definiert und wird mit „—“ angegeben.
 #rows-table(report.wake_variability,
   headers: ("Kennwert", "Mittelwert", "Standardabweichung", "Varianz", "Relative Streuung"),
   columns: (1fr, 1fr, 1fr, 1fr, 0.8fr))
@@ -70,7 +74,7 @@ Messbeginn. Rohdaten und Darstellungsfilter werden durch den Export nicht verän
 = Ereignisübersicht
 #if report.events.len() == 0 { [Keine Ereignisse gespeichert.] } else {
   set text(size: 7.5pt)
-  rows-table(report.events, headers: ("Nr.", "Art", "Beginn", "Dauer", "Ø Strom", "Peak", "Ladung"),
+  rows-table(report.events, headers: ("Nr.", "Art", "Beginn", "Dauer", "Ø Strom", "Spitzenstrom", "Ladung"),
     columns: (0.4fr, 0.9fr, 1fr, 1fr, 1fr, 1fr, 1fr))
 }
 = Marker
@@ -79,6 +83,6 @@ Messbeginn. Rohdaten und Darstellungsfilter werden durch den Export nicht verän
 }
 #pagebreak()
 = Geräte- und Kalibrierkonfiguration
-Gespeicherter PPK2-Snapshot zur Nachvollziehbarkeit des Messaufbaus:
+Zum Messzeitpunkt gespeicherte PPK2-Konfiguration zur Nachvollziehbarkeit des Messaufbaus:
 #set text(size: 7.5pt)
 #raw(report.config, lang: "json", block: true)

@@ -14,7 +14,7 @@ const MeasurementFields=(()=>{
   function add(formId,field={label:'',value:''},focus=true){
     if(focus&&rows(formId).length>=100)return;
     const row=document.createElement('div');row.className='custom-field-row';
-    row.setAttribute('role','group');row.setAttribute('aria-label','Eigenes Feld');
+    row.setAttribute('role','group');row.setAttribute('aria-label','Metadatenfeld');
     const id=`customField${++nextId}`;
     const nameLabel=document.createElement('label');
     const nameText=document.createElement('span');nameText.className='custom-field-label-text';nameText.textContent='Feldname';nameLabel.append(nameText);
@@ -32,7 +32,7 @@ const MeasurementFields=(()=>{
     valueLabel.htmlFor=value.id;valueLabel.append(value);
     const remove=document.createElement('button');remove.type='button';remove.className='custom-field-remove';
     const removeIcon=document.createElement('span');removeIcon.textContent='×';removeIcon.setAttribute('aria-hidden','true');remove.append(removeIcon);
-    remove.setAttribute('aria-label','Eigenes Feld entfernen');remove.title='Eigenes Feld entfernen';
+    remove.setAttribute('aria-label','Metadatenfeld entfernen');remove.title='Metadatenfeld entfernen';
     remove.addEventListener('click',()=>{
       const index=rows(formId).indexOf(row);row.remove();updateAddButton(formId);
       const remaining=rows(formId);(remaining[Math.min(index,remaining.length-1)]?.querySelector('[data-field-label]')||document.querySelector(`[data-add-measurement-field="${formId}"]`)).focus();

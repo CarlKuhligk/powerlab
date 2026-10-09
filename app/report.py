@@ -68,7 +68,7 @@ def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berl
         "name": m["name"], "id": m["id"], "status": m["status"],
         "generated": date(datetime.now(timezone.utc), timezone_name),
         "timezone": timezone_name,
-        "notes": m.get("notes") or "Keine Notizen hinterlegt.",
+        "notes": m.get("notes") or "Keine Prüfbedingungen oder Anmerkungen hinterlegt.",
         "error": m.get("error") or "",
         "context": [[label, str(m[key])] for label, key in [
             ("Projekt", "project"), ("Prüfling", "device"), ("Seriennummer", "serial_number"),
@@ -78,14 +78,16 @@ def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berl
             ["Beginn", date(m.get("started_at"), timezone_name)],
             ["Ende", date(m.get("finished_at"), timezone_name)],
             ["Messdauer (Zeitstempel)", number(m.get("duration_s"), "s")],
-            ["Zeitachse (Samples inkl. Lücken)", number(a.get("timeline_duration_s"), "s")]],
+            ["Messzeitachse einschließlich Datenlücken", number(a.get("timeline_duration_s"), "s")]],
         "setup": [
             ["Messgerät", "Nordic PPK2"], ["PPK2-ID", m.get("ppk2_id") or "—"],
             ["Port", m.get("port") or "—"], ["USB-Seriennummer", str(ppk.get("serial") or "—")],
             ["Betriebsart", {"source": "Source Meter", "ampere": "Ampere Meter"}.get(m["meter_mode"], m["meter_mode"])],
             ["Konfigurierte Spannung", number(m["voltage_mv"] / 1000, "V")],
             ["Abtastrate", number(m["sample_rate_hz"], "S/s", 0)],
-            ["Erkennungsmodus", str(settings.get("detection_mode") or "—")],
+            ["Erkennungsmodus", {"threshold": "Stromschwellen und Mindestdauer",
+                                "spectral_compare": "Spektralvergleich (experimentell)"}
+             .get(settings.get("detection_mode"), str(settings.get("detection_mode") or "—"))],
         ] + [[label, number(settings.get(key), unit)] for label, key, unit in [
             ("Sleep-Schwelle", "sleep_threshold_ua", "µA"), ("Sleep-Mindestdauer", "sleep_min_s", "s"),
             ("Wake-Schwelle", "wake_threshold_ua", "µA"), ("Wake-Mindestdauer", "wake_min_ms", "ms"),
@@ -97,15 +99,15 @@ def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berl
             ["Mittlerer Wake-Strom", number(a.get("average_wake_current_ua"), "µA")],
             ["Mittlere Periodendauer", number(a.get("average_period_s"), "s")],
             ["Mittlere Wake-Dauer", number(a.get("average_wake_duration_s"), "s", 6)],
-            ["Wake-Duty-Cycle", number(a.get("wake_duty_cycle_pct"), "%")],
+            ["Wake-Zeitanteil", number(a.get("wake_duty_cycle_pct"), "%")],
             ["Wake-Ereignisse", number(a.get("wake_count"), digits=0)],
             ["Vollständige Zyklen", number(a.get("cycle_count"), digits=0)],
             ["Gesamtladung", number(m.get("total_charge_uc"), "µC")],
             ["Energie (konfigurierte Spannung)", number(m.get("energy_uwh"), "µWh", 6)],
         ],
         "quality": [
-            ["Erfasste Samples", number(m.get("total_samples"), digits=0)],
-            ["Erkannte verlorene Samples", number(m.get("detected_lost_samples"), digits=0)],
+            ["Erfasste Messwerte", number(m.get("total_samples"), digits=0)],
+            ["Erkannte Messwertverluste", number(m.get("detected_lost_samples"), digits=0)],
             ["Datenabdeckung", number(m.get("data_coverage_pct") if m.get("total_samples") else None, "%", 6)],
         ],
         "sleep_results": [[label, number(sleep_data.get(key), unit, digits)] for label, key, unit, digits in [
@@ -130,7 +132,7 @@ def report_data(measurement: dict, overview: dict, *, timezone_name="Europe/Berl
                               number(metric.get('stddev'), unit, 6),
                               number(metric.get('variance'), unit + '²', 9), number(metric.get('cv_pct'), '%')]
                              for key, label, unit in [('duration_s', 'Wake-Dauer', 's'),
-                                                       ('current_ua', 'Strom je Wake', 'µA'),
+                                                       ('current_ua', 'Strom je Wake-Phase', 'µA'),
                                                        ('energy_uwh', 'Wake-Energie', 'µWh')]
                              for metric in [variability.get(key, {})]],
         "events": [[str(e["sequence"]), "Hintergrund" if e.get("event_kind") == "background" else "Wake",

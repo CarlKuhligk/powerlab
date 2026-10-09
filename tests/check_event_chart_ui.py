@@ -102,7 +102,7 @@ with sync_playwright() as p:
     assert page.locator('#eventRows button').first.evaluate("el => getComputedStyle(el).outlineStyle") == 'solid'
 
     chart = page.locator('#wakeEventChart')
-    expected = ['Current', 'D0', 'Wake-Start', 'Wake bestätigt', 'Sleep-Start', 'Sleep bestätigt']
+    expected = ['Strom', 'D0', 'Wake-Start', 'Wake bestätigt', 'Sleep-Start', 'Sleep bestätigt']
     assert chart.locator('.legendtext').all_text_contents() == expected
     rings = chart.locator('.scatterlayer .trace').filter(has=page.locator('.points path.point'))
     assert rings.count() == 4

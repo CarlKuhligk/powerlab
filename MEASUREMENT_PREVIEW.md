@@ -1,13 +1,13 @@
-# Messvorschau und Trigger justieren
+# Messvorschau und Triggerabstimmung
 
 Im Dialog „Messung anlegen“ bzw. „Planung bearbeiten“ zuerst Gerät, Modus und
-Spannung auswählen. Unter „Messvorschau & Trigger justieren“ startet
+Spannung auswählen. Unter „Messvorschau & Triggerabstimmung“ startet
 „Vorschau starten“ einen vorübergehenden PPK2-Datenstrom. Es entsteht dabei
 kein Measurement-Datensatz, keine Messhistorie und kein Exportverzeichnis.
 Im Source-Modus wird die gewählte Versorgungsspannung wie bei einer Messung
 am PPK2 eingestellt.
 
-## Slice 1: Gerät → begrenzte Vorschau → echte Detektoren
+## Datenerfassung und Zustandserkennung
 
 Die Vorschau reserviert den PPK2 gegenüber weiteren Vorschauen und laufenden
 Messungen. `PreviewEngine` behält bis zu 60 Sekunden Originalsamples für
@@ -22,7 +22,7 @@ werden separat angezeigt. Ein offener Wake-Kandidat wird auf die verfügbare
 Vorschauhistorie begrenzt; Vorlauf, Nachlauf und Mindestdauern stammen aus
 denselben Eingabefeldern wie die später gespeicherte Messung.
 
-## Slice 2: Parametereingabe → Rohdaten-Replay → neue Trigger
+## Triggerparameter und erneute Auswertung
 
 Stromschwellen lassen sich als Zahlen einstellen, als Linien ziehen oder mit
 „Wake-Schwelle setzen“ / „Sleep-Schwelle setzen“ per Klick in der Stromkurve
@@ -42,12 +42,12 @@ gelernt; enthält der Ausschnitt keinen ausreichend langen Sleep, bleibt die
 Analyse in der Lernphase. Aus den Diagramm-Mittelwerten werden keine
 samplegenauen Trigger abgeleitet.
 
-„Live anhalten“ beendet die Geräteaufnahme und behält die letzten Daten für
+„Vorschau anhalten“ beendet die Geräteaufnahme und behält die letzten Daten für
 weitere Parameteränderungen. „Vorschau neu starten“ startet einen neuen
 Datenstrom mit den aktuellen Werten. Änderungen von Gerät, Messmodus oder
 Spannung schließen die Vorschau; ein neuer Start verwendet die neuen Werte.
 
-## Slice 3: Justierte Einstellungen → Start oder Planung
+## Übernahme der Messparameter
 
 Die Vorschau schreibt direkt in die vorhandenen Formulareingaben. Beim
 Anlegen oder Speichern einer Planung wartet die Oberfläche auf laufende

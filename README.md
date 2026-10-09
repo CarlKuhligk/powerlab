@@ -1,16 +1,26 @@
 # PowerLab
 
+PowerLab ist eine lokale Anwendung zur Messdatenerfassung, Auswertung und
+Dokumentation im Messlabor für das **Nordic Power Profiler Kit II (PPK2)**.
+Sie unterstützt die Charakterisierung des Stromverbrauchs energieeffizienter
+Embedded-Systeme mit nominal **100 kS/s** und **10 µs Abtastintervall**.
+Messparameter, Prüfbedingungen und Rohdaten werden zusammen mit den Ergebnissen
+gespeichert und können als Messprotokoll exportiert werden.
+
+## Messprofile und Prüfbedingungen
+
 Beim Anlegen einer Messung lassen sich benannte **Messprofile** über das Dropdown
 ganz oben auswählen. Ein Profil übernimmt die gespeicherten Formularwerte:
 Messkontext, PPK2, Modus, Spannung, Zeitplanung und Wake-/Sleep-Trigger.
 Die Werte können danach angepasst werden. Neue Messungen ohne Profil beginnen
-unter „Messung & Gerät“ mit den leeren Feldern **Name** und **Notiz**.
-Über **Eigenes Feld hinzufügen** lassen sich frei benannte Angaben ergänzen,
+unter „Messbezeichnung & Prüfbedingungen“ mit den leeren Feldern
+**Messbezeichnung** und **Prüfbedingungen / Anmerkungen**.
+Über **Metadatenfeld hinzufügen** lassen sich frei benannte Angaben ergänzen,
 zum Beispiel Firmware, Seriennummer oder Temperatur. Feldnamen und Werte können
 bearbeitet oder entfernt werden. Sie werden mit der Messung und im Messprofil
 gespeichert und erscheinen in den Messungsdetails, JSON-/Bundle-Exporten und im
 PDF-Messprotokoll. Angaben älterer Messungen bleiben erhalten und werden beim
-Bearbeiten als eigene Felder angezeigt.
+Bearbeiten als Metadatenfelder angezeigt.
 
 Der Button **Einstellungen speichern** zwischen **Abbrechen** und
 **Messung anlegen** öffnet einen Dialog für den Profilnamen. **Profil speichern**
@@ -27,7 +37,7 @@ Neue Messungen bestätigen Zustände über **Stromschwellen und Mindestdauer**.
 Sleep und Wake werden erst nach der jeweiligen Mindestdauer bestätigt.
 Die bisherigen automatischen und adaptiven Modi wurden aus UI und Backend entfernt.
 Im Dropdown steht außerdem der experimentelle [Spektralvergleich](SPECTRAL_DETECTION.md)
-mit zusätzlichen FFT-Markierungen zur Verfügung. Ereignisse und Auto-Stop
+mit zusätzlichen FFT-Markierungen zur Verfügung. Ereignisse und automatische Beendigung
 verwenden dabei weiterhin die Stromschwellen.
 Historische Messungen bleiben lesbar. Bestehende Planungen mit einem entfernten
 Modus müssen über „Planung bearbeiten“ mit gültigen Schwellen neu gespeichert werden;
@@ -39,11 +49,9 @@ Beim Anlegen oder Bearbeiten einer Planung lässt sich eine
 Trigger per Klick oder Ziehen justieren und die Werte anschließend für
 eine gestartete oder geplante Messung übernehmen.
 
-PowerLab ist eine lokale Mess- und Analyseanwendung für **Nordic Power Profiler Kit II (PPK2)**. Sie richtet sich an Ultra-Low-Power-Embedded-Entwicklung und erfasst den PPK2-Datenstrom mit nominal **100 kS/s / 10 µs Sampleabstand**.
-
 Die Anwendung arbeitet ausschließlich mit echten PPK2-Geräten. Ein Simulations-/Mock-Treiber ist nicht enthalten.
 
-## History-Analyse
+## Auswertung archivierter Messungen
 
 Ein eigener Bereich **Sleep-Auswertung** in den Messungsdetails und im PDF-Messprotokoll zeigt erfasste Sleep-Zeit, Strom, Ladung und Energie einschließlich zugeordneter Hintergrundereignisse. Diese Kennwerte berücksichtigen gespeicherte Sleep-Daten auch ohne vollständigen Wake-Zyklus und ergänzen keine Datenlücken. Eine separate Tabelle zeigt die Sleep-Phasen aus gültigen Zyklen samt Kennzeichnung ergänzter Datenlücken. Gespeicherte Sleep-Abschnitte sind Speicher-Checkpoints und werden nicht als eigene Phasen gezählt. JSON-Exporte und Bundle-Metadaten enthalten denselben Bereich unter `sleep_analysis`. Das PDF enthält außerdem die Varianz, Standardabweichung und relative Streuung der gültigen Wake-Zustände.
 
@@ -61,25 +69,25 @@ Im Wake-Event-Betrachter steht neben Log/Linear eine Glättung mit den Stufen Au
 Die Live-Ansicht verwendet einen **ereignisgesteuerten WebSocket-Stream**. Neue
 Messwertblöcke und Kennzahlen werden vom Server übertragen, sobald Messdaten
 vorliegen, gebündelt auf maximal vier Aktualisierungen pro Sekunde. Im Modus
-`Live folgen` gibt es keine wiederholten HTTP-Abfragen der Messkurve.
+`Live nachführen` gibt es keine wiederholten HTTP-Abfragen der Messkurve.
 Die Übersicht aktiver und geplanter Messungen wird ebenfalls bei Änderungen
 übertragen. Zoomdetails werden gezielt per HTTP geladen; beim Zurückschalten
-auf `Live folgen` wird die laufend aktualisierte Stream-Historie verwendet.
+auf `Live nachführen` wird die laufend aktualisierte Stream-Historie verwendet.
 Bei einer Wiederverbindung wird die Historie neu synchronisiert; ein fixierter
 Zoom bleibt erhalten. Technische Details und die vertikalen Slices:
 [LIVE_STREAMING.md](LIVE_STREAMING.md).
 
 Der Live-Chart zeigt standardmäßig die **gesamte Messhistorie seit Messbeginn**. PowerLab sendet dabei niemals die vollständigen 100.000 Samples/s an den Browser. Stattdessen bleibt die Darstellung auf ein festes Punktbudget begrenzt und erhält lokale Minima/Maxima. Beim Hineinzoomen fordert die Weboberfläche nur den sichtbaren Zeitbereich erneut an. Für kurze Bereiche (bis 30 s) werden vorhandene Wake-Event-Rohdaten aus dem Event Store automatisch mit einbezogen; bei ausreichend engem Zoom sind dadurch wieder Daten bis zur nativen 10-µs-Zeitbasis sichtbar.
 
-`Live folgen` bedeutet: Die X-Achse zeigt immer `0 … jetzt` und wächst nach rechts. Wird der Modus ausgeschaltet oder manuell gezoomt, bleibt der Ausschnitt fixiert, während die Messung im Hintergrund weiterläuft.
+`Live nachführen` bedeutet: Die X-Achse zeigt immer `0 … jetzt` und wächst nach rechts. Wird der Modus ausgeschaltet oder manuell gezoomt, bleibt der Ausschnitt fixiert, während die Messung im Hintergrund weiterläuft.
 
 ## Highlights
 
-Im Zeitplaner stehen unter **Stop** auch **Nach Wake-Ereignissen** und
+Im Zeitplaner stehen unter **Ende** auch **Nach Wake-Ereignissen** und
 **Nach Sleep-Ereignissen** zur Verfügung. Es zählen nur bestätigte Zustandswechsel,
-keine Kandidaten oder Sleep-Checkpoints. Nach beispielsweise fünf Wakes wartet
+keine Kandidaten oder Sleep-Checkpoints. Nach beispielsweise fünf Wake-Ereignissen wartet
 PowerLab auf den anschließend bestätigten Sleep und beendet die Messung rückwirkend
-an dessen Start. Bei fünf Sleeps erfolgt der Stop entsprechend am nächsten
+an dessen Start. Bei fünf Sleep-Ereignissen erfolgt die Beendigung entsprechend am nächsten
 bestätigten Wake-Start; der erste bestätigte Sleep zählt mit. Die Bestätigungszeit
 geht nicht in Messdauer oder Statistik ein. Die Anzahl bleibt bei geplanten
 Messungen und beim Bearbeiten der Planung gespeichert.
@@ -93,51 +101,51 @@ Messungen und beim Bearbeiten der Planung gespeichert.
 - hochauflösende Wake-Events in Parquet/Zstd
 - SQLite für Messungsverwaltung und Metadaten
 - Plotly für Live- und History-Charts mit Zoom
-- Zoom bleibt bei Live-Updates erhalten; `Live folgen` reaktiviert Auto-Range
+- Zoom bleibt bei Live-Updates erhalten; `Live nachführen` reaktiviert Auto-Range
 - vollständiger PPK2-Konfigurations-/Kalibrier-Snapshot pro Messung
 - Export als PDF-Messprotokoll, JSON, CSV und PowerLab-Bundle
 - **Zeitplanung**: sofort oder fester Startzeitpunkt
-- **Auto-Stop**: manuell, nach Dauer oder zu einem festen Endzeitpunkt
+- **Abbruchkriterium**: manuell, nach Dauer oder zu einem festen Endzeitpunkt
 - geplante Messungen bleiben persistent in SQLite und werden nach einem Neustart wieder berücksichtigt
 
 ## UI-Konzept
 
-### Live
+### Messbetrieb
 
-`Live` ist die Statusübersicht. Dort erscheinen nur:
+`Messbetrieb` zeigt den aktuellen Erfassungs- und Planungsstatus:
 
 - laufende Messungen
 - geplante / ausstehende Messungen
 - Zuordnung zum jeweiligen PPK2
-- Start- und Stopplan
+- Startzeit und Abbruchkriterium
 - kompakter Status
 
-Der große Messchart liegt bewusst **nicht** auf dieser Übersichtsseite.
+Messparameter und Stromverlauf sind in der Detailansicht jeder Messung verfügbar.
 
-Ein Klick auf eine laufende oder geplante Session öffnet deren eigene Unterseite.
+Ein Klick auf eine laufende oder geplante Messung öffnet die Detailansicht.
 
-### Live → Messungsseite
+### Messparameter und Live-Daten
 
-Die Session-Seite zeigt das konkrete Setup:
+Die Detailansicht dokumentiert den Messaufbau:
 
 - PPK2-ID und COM-Port
 - Source/Ampere Meter
 - Versorgungsspannung
-- Sample-Rate
-- Trigger- und Pre-Trigger-Konfiguration
-- Zeitplanung / Auto-Stop
+- Abtastrate
+- Triggerparameter sowie Vorlauf und Nachlauf
+- Zeitplanung und Abbruchkriterium
 
 Bei einer geplanten Messung kann die Planung bis zum Start bearbeitet oder abgebrochen werden.
 
-Wenn die Session läuft, erscheinen zusätzlich:
+Während der Aufzeichnung erscheinen zusätzlich:
 
-- Live-Stromchart
-- Current / Sleep Baseline / Peak
-- Wake Events
-- Charge / Energy
-- Marker und Stop-Steuerung
+- Live-Stromverlauf
+- aktueller Strom, Sleep-Referenz und Spitzenstrom
+- Wake-Ereignisse und bestätigte Wake-Phasen
+- Ladung und Energie
+- Marker und manuelle Beendigung
 
-Nach Abschluss verschwindet die Session aus `Live` und ist unter `Messungen` verfügbar.
+Nach Abschluss wird die Messung unter `Messungen` archiviert.
 
 Unter `Messungen` lassen sich mehrere Einträge über Checkboxen auswählen. Die Checkbox im Tabellenkopf wählt alle sichtbaren Suchtreffer aus; bereits ausgewählte, ausgeblendete Messungen bleiben in der Auswahl und werden im Zähler ausgewiesen. `Auswahl exportieren` lädt eine gemeinsame ZIP-Datei mit JSON-Metadaten, CSV-Übersichten oder vollständigen PowerLab-Bundles inklusive Rohdaten herunter. `Auswahl löschen` entfernt die ausgewählten Messungen nach einer gemeinsamen Bestätigung. Fehlgeschlagene Löschungen bleiben ausgewählt.
 
@@ -170,7 +178,7 @@ Beim Anlegen einer Messung stehen zur Verfügung:
 - Sofort
 - Zeitpunkt
 
-**Stop**
+**Ende**
 - Manuell
 - Nach Dauer
 - Endzeitpunkt
@@ -180,9 +188,9 @@ Beispiele:
 - sofort starten und 30 Minuten messen
 - heute um 23:00 starten und 8 Stunden messen
 - morgen 08:00 starten und exakt um 17:00 stoppen
-- geplante Session ohne Auto-Stop starten und später manuell beenden
+- geplante Messung ohne automatische Beendigung starten und später manuell beenden
 
-Für geplante Messungen muss das zugewiesene PPK2 zum Startzeitpunkt angeschlossen und frei sein. Ist das Gerät nicht verfügbar, wird die Session als `failed` protokolliert.
+Für geplante Messungen muss das zugewiesene PPK2 zum Startzeitpunkt angeschlossen und frei sein. Ist das Gerät nicht verfügbar, wird die Messung als `failed` protokolliert.
 
 ## Mehrere PPK2
 
@@ -194,7 +202,7 @@ PPK2 COM7 -> Measurement B
 PPK2 COM9 -> frei
 ```
 
-Ein PPK2 kann nicht gleichzeitig von zwei laufenden Messungen verwendet werden. Überlappende geplante Sessions desselben PPK2 werden ebenfalls blockiert, soweit deren Zeitfenster bekannt sind.
+Ein PPK2 kann nicht gleichzeitig von zwei laufenden Messungen verwendet werden. Überlappende geplante Messungen desselben PPK2 werden ebenfalls blockiert, soweit deren Zeitfenster bekannt sind.
 
 ## PPK2-Messlog
 
@@ -205,7 +213,7 @@ im PDF-Messprotokoll sowie in JSON- und Bundle-Metadaten. Die Seriennummer des
 Prüflings wird unabhängig von der automatisch erfassten PPK2-USB-Seriennummer
 gespeichert.
 
-Jede Session speichert unter anderem:
+Jede Messung speichert unter anderem:
 
 - PPK2-ID
 - COM-Port

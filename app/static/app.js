@@ -27,6 +27,7 @@ async function api(url, options={}) {
 }
 function toast(message,error=false){const el=$('toast');el.textContent=message;el.className=`toast show${error?' error':''}`;clearTimeout(el._timer);el._timer=setTimeout(()=>el.className='toast',3000)}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function measurementStatusLabel(status){return({created:'Angelegt',scheduled:'Geplant',starting:'Startet',recording:'Aufzeichnung',running:'Aufzeichnung',stopping:'Wird beendet',completed:'Abgeschlossen',failed:'Fehlgeschlagen',cancelled:'Abgebrochen',no_sleep:'Keine Sleep-Phase bestätigt'})[status]||status||'—'}
 function fmtCurrent(uA){if(uA==null||!Number.isFinite(Number(uA)))return'—';const v=Number(uA),a=Math.abs(v);if(a>=1e6)return`${(v/1e6).toFixed(3)} A`;if(a>=1000)return`${(v/1000).toFixed(a>=100000?1:3)} mA`;if(a<1)return`${(v*1000).toFixed(1)} nA`;return`${v.toFixed(a<10?3:2)} µA`}
 function currentUnit(values){
   let peak=0;for(const value of values)if(value!=null&&Number.isFinite(Number(value)))peak=Math.max(peak,Math.abs(Number(value)));
@@ -61,7 +62,7 @@ function bindEventChartInteractions(d,unit){
     let details;
     if(point.curveNumber===0){
       const raw=d.current_ua[index],display=eventDisplayCurrent(d)[index];
-      details=d.aggregated?`Block-Extremwert: <strong>${escapeHtml(fmtCurrent(raw))}</strong><br>Zeitposition angenähert`:d.downsampled?`Rohsample aus Min/Max-Auswahl: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:(state.historySmoothing==='off'?`Strom: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:`Geglättet: <strong>${escapeHtml(fmtCurrent(display))}</strong><br>Rohwert: ${escapeHtml(fmtCurrent(raw))}`);
+      details=d.aggregated?`Block-Extremwert: <strong>${escapeHtml(fmtCurrent(raw))}</strong><br>Zeitposition angenähert`:d.downsampled?`Rohmesswert aus Min/Max-Auswahl: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:(state.historySmoothing==='off'?`Strom: <strong>${escapeHtml(fmtCurrent(raw))}</strong>`:`Geglättet: <strong>${escapeHtml(fmtCurrent(display))}</strong><br>Rohwert: ${escapeHtml(fmtCurrent(raw))}`);
       // Plotly can pick the current trace when a state marker shares its sample.
       // Keep both the state and the sample value visible in that case.
       const markerTrace=(el.data||[]).find(trace=>trace.meta?.role==='state-marker'&&trace.x.some((x,i)=>Number(x)===Number(point.x)&&Number(trace.y[i])===Number(point.y)));
@@ -86,7 +87,7 @@ function bindEventChartInteractions(d,unit){
     state.eventZoomTimer=setTimeout(()=>reloadEventRange(d,state.eventVisibleRange).catch(showEventRenderError),200);
   });
 }
-function showEventRenderError(err){if(err.name==='AbortError')return;console.error('Wake event chart render failed',err);toast('Wake-Event-Chart konnte nicht gerendert werden.',true)}
+function showEventRenderError(err){if(err.name==='AbortError')return;console.error('Wake event chart render failed',err);toast('Das Diagramm des Wake-Ereignisses konnte nicht dargestellt werden.',true)}
 function fmtCharge(uC){if(uC==null)return'—';const v=Number(uC);if(Math.abs(v)>=3.6e6)return`${(v/3.6e6).toFixed(4)} mAh`;if(Math.abs(v)>=1000)return`${(v/1000).toFixed(3)} mC`;return`${v.toFixed(2)} µC`}
 function fmtEnergy(uWh){if(uWh==null)return'—';const v=Number(uWh);return Math.abs(v)>=1000?`${(v/1000).toFixed(4)} mWh`:`${v.toFixed(3)} µWh`}
 function fmtPercent(v,digits=3){if(v==null||!Number.isFinite(Number(v)))return'—';return`${Number(v).toFixed(digits)} %`}
@@ -104,7 +105,7 @@ function setView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav').forEach(v=>{v.classList.remove('active');v.ariaCurrent=null});
   const map={live:'liveView',session:'sessionView',measurements:'measurementsView',detail:'detailView'};$(map[name]).classList.add('active');
   const nav=document.querySelector(`.nav[data-view="${name==='session'?'live':name==='detail'?'measurements':name}"]`);if(nav){nav.classList.add('active');nav.ariaCurrent='page';}
-  const titles={live:['Aktiv','Laufende und geplante PPK2-Messungen'],session:['Aktiv · Messung','Setup und Live-Daten der ausgewählten Session'],measurements:['Messungen','Historie durchsuchen, analysieren und exportieren'],detail:['Messprotokoll','Kennzahlen, Zustandsverlauf und Ereignisse']};
+  const titles={live:['Messbetrieb','Laufende und geplante PPK2-Messungen'],session:['Messbetrieb · Messung','Messparameter und Live-Daten der ausgewählten Messung'],measurements:['Messungen','Archivierte Messungen durchsuchen, auswerten und exportieren'],detail:['Messprotokoll','Messkennwerte, Zustandsverlauf und Ereignisprotokoll']};
   [$('pageTitle').textContent,$('pageSubtitle').textContent]=titles[name];
 }
 
@@ -145,11 +146,11 @@ function renderSessionCards(containerId,items,scheduled=false,now=Date.now()){
     let card=existing.get(id);
     if(!card){
       card=document.createElement('article');card.className='session-card';card.dataset.session=id;card.tabIndex=0;card.role='button';
-      card.innerHTML=`<div class="session-card-head"><div><div class="session-card-badges"><span class="status-badge ${scheduled?'scheduled':'recording'}" data-field="status"></span>${scheduled?'':'<span class="status-badge hidden" data-field="phase"></span>'}</div><h3 data-field="name"></h3><p data-field="device"></p></div></div><div class="session-card-grid"><div><span>${scheduled?'Start':'Gestartet'}</span><strong data-field="start"></strong></div><div><span>${scheduled?'Stop':'Auto-Stop'}</span><strong data-field="stop"></strong></div>${scheduled?'':'<div><span>Laufzeit</span><strong data-field="elapsed"></strong></div><div data-field="remainingRow"><span>Verbleibend</span><strong data-field="remaining"></strong></div>'}</div>`;
+      card.innerHTML=`<div class="session-card-head"><div><div class="session-card-badges"><span class="status-badge ${scheduled?'scheduled':'recording'}" data-field="status"></span>${scheduled?'':'<span class="status-badge hidden" data-field="phase"></span>'}</div><h3 data-field="name"></h3><p data-field="device"></p></div></div><div class="session-card-grid"><div><span>${scheduled?'Start':'Gestartet'}</span><strong data-field="start"></strong></div><div><span>${scheduled?'Messende':'Abbruchkriterium'}</span><strong data-field="stop"></strong></div>${scheduled?'':'<div><span>Laufzeit</span><strong data-field="elapsed"></strong></div><div data-field="remainingRow"><span>Verbleibend</span><strong data-field="remaining"></strong></div>'}</div>`;
       card.addEventListener('click',()=>openSession(card.dataset.session));
       card.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openSession(card.dataset.session)}});
     }
-    const fields={status:scheduled?'GEPLANT':'RECORDING',name:item.name??'',device:`${item.port||'—'} · ${item.ppk2_id||'PPK2'}`,start:fmtDate(scheduled?item.scheduled_start_at:item.started_at),stop:scheduled||['wake_count','sleep_count'].includes(item.stop_mode)?scheduleStopText(item):item.planned_end_at?fmtDate(item.planned_end_at):'manuell'};
+    const fields={status:scheduled?'GEPLANT':'AUFZEICHNUNG',name:item.name??'',device:`${item.port||'—'} · ${item.ppk2_id||'PPK2'}`,start:fmtDate(scheduled?item.scheduled_start_at:item.started_at),stop:scheduled||['wake_count','sleep_count'].includes(item.stop_mode)?scheduleStopText(item):item.planned_end_at?fmtDate(item.planned_end_at):'manuell'};
     if(!scheduled){
       const phase={ACTIVE:['Wake','wake-state'],SLEEP:['Sleep','sleep-state'],WAITING_SLEEP:['Sleep-Suche','search-state'],CALIBRATING:['Kalibrierung','search-state']}[item.state];
       const badge=card.querySelector('[data-field="phase"]');
@@ -185,7 +186,7 @@ function renderLiveOverview(data){
     }
   }
 }
-function scheduleStopText(m){if(m.stop_mode==='duration')return fmtDuration(m.requested_duration_s);if(m.stop_mode==='end')return fmtDate(m.scheduled_end_at);if(m.stop_mode==='wake_count'||m.stop_mode==='sleep_count')return`${m.event_count??m.settings?.event_count} bestätigte ${m.stop_mode==='wake_count'?'Wakes → Sleep-Start':'Sleeps → Wake-Start'}`;return'manuell'}
+function scheduleStopText(m){if(m.stop_mode==='duration')return fmtDuration(m.requested_duration_s);if(m.stop_mode==='end')return fmtDate(m.scheduled_end_at);if(m.stop_mode==='wake_count'||m.stop_mode==='sleep_count')return`${m.event_count??m.settings?.event_count} bestätigte ${m.stop_mode==='wake_count'?'Wake-Ereignisse → Sleep-Beginn':'Sleep-Ereignisse → Wake-Beginn'}`;return'manuell'}
 function connectOverview(){if(state.overviewWs)try{state.overviewWs.close()}catch(_){}const proto=location.protocol==='https:'?'wss:':'ws:';const ws=new WebSocket(`${proto}//${location.host}/ws/live`);state.overviewWs=ws;ws.onmessage=e=>renderLiveOverview(JSON.parse(e.data));ws.onclose=()=>setTimeout(connectOverview,1500)}
 
 function updateScheduleFields(){
@@ -199,7 +200,7 @@ function updateScheduleFields(){
   $('scheduleStartHint').hidden=!startDisabled;$('scheduleStopHint').hidden=stop!=='manual';
   const eventDisabled=stop!=='wake_count'&&stop!=='sleep_count';
   $('eventCount').disabled=eventDisabled;$('eventCount').required=!eventDisabled;$('eventCountLabel').hidden=eventDisabled;
-  $('eventCountHelp').textContent=stop==='wake_count'?'Stop am nächsten bestätigten Sleep-Start nach der gewählten Anzahl Wakes.':'Der erste bestätigte Sleep zählt mit. Stop am nächsten bestätigten Wake-Start nach der gewählten Anzahl Sleeps.';
+  $('eventCountHelp').textContent=stop==='wake_count'?'Beendigung am nächsten bestätigten Sleep-Beginn nach der festgelegten Anzahl Wake-Ereignisse.':'Die erste bestätigte Sleep-Phase wird mitgezählt. Beendigung am nächsten bestätigten Wake-Beginn nach der festgelegten Anzahl Sleep-Ereignisse.';
   const now=new Date();const minStart=localInput(now);startInput.min=minStart;
   const selectedStart=!startDisabled&&startInput.value?new Date(startInput.value):now;
   endInput.min=localInput(new Date(selectedStart.getTime()+1000));
@@ -227,12 +228,12 @@ async function openSession(id){
 function renderSession(m){
   renderLiveWakePhases(m.cycle_energy?.valid_wake_phases||[]);
   $('sessionStopBtn').disabled=state.sessionStopPendingId===m.id;
-  $('sessionStopBtn').textContent=state.sessionStopPendingId===m.id?'Stoppt …':'■ Stop';
-  $('sessionStatus').textContent=String(m.status||'').toUpperCase();$('sessionName').textContent=m.name;$('sessionMeta').textContent=[m.project,m.device,m.serial_number?`SN: ${m.serial_number}`:'',m.firmware?`FW: ${m.firmware}`:'',m.hardware_version?`HW: ${m.hardware_version}`:'',...(m.custom_fields||[]).map(field=>`${field.label}: ${field.value||'—'}`)].filter(Boolean).join(' · ')||'Ohne Metadaten';
+  $('sessionStopBtn').textContent=state.sessionStopPendingId===m.id?'Wird beendet …':'■ Messung beenden';
+  $('sessionStatus').textContent=measurementStatusLabel(m.status).toUpperCase();$('sessionName').textContent=m.name;$('sessionMeta').textContent=[m.project,m.device,m.serial_number?`SN: ${m.serial_number}`:'',m.firmware?`FW: ${m.firmware}`:'',m.hardware_version?`HW: ${m.hardware_version}`:'',...(m.custom_fields||[]).map(field=>`${field.label}: ${field.value||'—'}`)].filter(Boolean).join(' · ')||'Keine ergänzenden Metadaten hinterlegt';
   const scheduled=m.status==='scheduled';$('editScheduledBtn').classList.toggle('hidden',!scheduled);$('cancelScheduledBtn').classList.toggle('hidden',!scheduled);$('sessionStopBtn').classList.toggle('hidden',scheduled);$('sessionLiveArea').classList.toggle('hidden',scheduled);$('sessionPendingInfo').classList.toggle('hidden',!scheduled);
-  $('sessionTimeMain').textContent=scheduled?'Geplant':m.started_at?fmtDuration((Date.now()-new Date(m.started_at).getTime())/1000):'Startet …';$('sessionTimeSub').textContent=scheduled?`Stop: ${scheduleStopText(m)}`:`Start: ${fmtDate(m.started_at)}`;
-  const s=m.settings||{};$('sessionSetup').innerHTML=[['PPK2',m.ppk2_id||m.port||'—'],['COM-Port',m.port||'—'],['Messmodus',m.meter_mode==='source'?'Source meter':'Ampere meter'],['Spannung',`${(m.voltage_mv/1000).toFixed(3)} V`],['Sample Rate',`${(m.sample_rate_hz/1000).toFixed(0)} kS/s`],['Erkennung',s.detection_mode==='spectral_compare'?'Spektralvergleich (experimentell)':s.detection_mode==='threshold'?'Stromschwellen und Mindestdauer':'Entfernter Modus – Planung bearbeiten'],['Vorlauf',`${s.pre_trigger_ms??1000} ms`],['Nachlauf',`${s.post_trigger_ms??1000} ms`],...(['threshold','spectral_compare'].includes(s.detection_mode)?[['Sleep unter',fmtCurrent(s.sleep_threshold_ua)],['Wake über',fmtCurrent(s.wake_threshold_ua)],['Sleep-Mindestdauer',`${s.sleep_min_s} s`],['Wake-Mindestdauer',`${s.wake_min_ms} ms`]]:[]),['Auto-Stop',scheduleStopText(m)]].map(([k,v])=>`<div class="setup-item"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join('');
-  if(scheduled)$('sessionPendingInfo').innerHTML=`<strong>Ausstehende Messung.</strong><br>PowerLab startet diese Session automatisch am <b>${escapeHtml(fmtDate(m.scheduled_start_at))}</b>. Das gewählte PPK2 muss zu diesem Zeitpunkt angeschlossen und frei sein. Bis dahin kannst du Setup und Zeitplanung über „Planung bearbeiten“ ändern.`;
+  $('sessionTimeMain').textContent=scheduled?'Geplant':m.started_at?fmtDuration((Date.now()-new Date(m.started_at).getTime())/1000):'Startet …';$('sessionTimeSub').textContent=scheduled?`Messende: ${scheduleStopText(m)}`:`Start: ${fmtDate(m.started_at)}`;
+  const s=m.settings||{};$('sessionSetup').innerHTML=[['PPK2',m.ppk2_id||m.port||'—'],['COM-Port',m.port||'—'],['Messmodus',m.meter_mode==='source'?'Source Meter':'Ampere Meter'],['Konfigurierte Spannung',`${(m.voltage_mv/1000).toFixed(3)} V`],['Abtastrate',`${(m.sample_rate_hz/1000).toFixed(0)} kS/s`],['Erkennung',s.detection_mode==='spectral_compare'?'Spektralvergleich (experimentell)':s.detection_mode==='threshold'?'Stromschwellen und Mindestdauer':'Erkennungsmodus nicht mehr verfügbar – Planung bearbeiten'],['Vorlauf',`${s.pre_trigger_ms??1000} ms`],['Nachlauf',`${s.post_trigger_ms??1000} ms`],...(['threshold','spectral_compare'].includes(s.detection_mode)?[['Sleep unter',fmtCurrent(s.sleep_threshold_ua)],['Wake über',fmtCurrent(s.wake_threshold_ua)],['Sleep-Mindestdauer',`${s.sleep_min_s} s`],['Wake-Mindestdauer',`${s.wake_min_ms} ms`]]:[]),['Abbruchkriterium',scheduleStopText(m)]].map(([k,v])=>`<div class="setup-item"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join('');
+  if(scheduled)$('sessionPendingInfo').innerHTML=`<strong>Ausstehende Messung.</strong><br>Die Aufzeichnung startet automatisch am <b>${escapeHtml(fmtDate(m.scheduled_start_at))}</b>. Das ausgewählte PPK2 muss zum Startzeitpunkt angeschlossen und verfügbar sein. Messparameter und Zeitplanung können bis zum Messbeginn über „Planung bearbeiten“ geändert werden.`;
 }
 function closeSessionWs(){
   clearTimeout(state.sessionReconnectTimer);state.sessionReconnectTimer=null;
@@ -276,9 +277,9 @@ function connectSessionLive(id,{reconnect=false}={}){
   };
 }
 function updateLiveFollowButton(){
-  const b=$('liveFollowBtn');b.textContent=state.liveFollow?'● Live folgen':'○ Ansicht fixiert';b.classList.toggle('paused',!state.liveFollow);
+  const b=$('liveFollowBtn');b.textContent=state.liveFollow?'● Live nachführen':'○ Ansicht fixiert';b.classList.toggle('paused',!state.liveFollow);
   b.title=state.liveFollow?'Die komplette Messhistorie bleibt sichtbar und wächst am rechten Rand weiter.':'Der sichtbare Bereich bleibt fixiert. Zoomen und Verschieben lädt automatisch passende Detaildaten.';
-  const sub=$('liveChartSubtitle');if(sub)sub.textContent=state.liveFollow?'Komplette Messhistorie · adaptive Level-of-Detail-Darstellung':'Ansicht fixiert · Zoom lädt automatisch höhere Auflösung';
+  const sub=$('liveChartSubtitle');if(sub)sub.textContent=state.liveFollow?'Gesamter Messverlauf · Auflösung abhängig vom Zeitfenster':'Ansicht fixiert · Zoom lädt Daten mit höherer Auflösung';
 }
 function liveTrace(points,name='Historie',lineWidth=1.15,opacity=1,unit={factor:1}){
   // Sparse event summaries do not describe a waveform. Keep their peak markers
@@ -324,12 +325,12 @@ function liveSummaryTraces(points,unit={factor:1}){
     {x:bandX,y:bandY,type:'scatter',mode:'lines',name:'Min/Max-Bereich',fill:'toself',
       fillcolor:'rgba(101,217,139,0.12)',line:{width:0},hoverinfo:'skip',connectgaps:false},
     {x,y,customdata,type:'scattergl',mode:'lines',name:'Mittlerer Strom',line:{width:1.7,color:'#65d98b'},connectgaps:false,
-      hovertemplate:'Mittelwert %{customdata[0]}<br>Min %{customdata[1]} · Max %{customdata[2]}<br>%{customdata[3]} Samples · Block %{customdata[4]:.6f}–%{customdata[5]:.6f} s<extra></extra>'}
+      hovertemplate:'Mittelwert %{customdata[0]}<br>Min %{customdata[1]} · Max %{customdata[2]}<br>%{customdata[3]} Messwerte · Block %{customdata[4]:.6f}–%{customdata[5]:.6f} s<extra></extra>'}
   ];
 }
 function liveEventTrace(events,unit={factor:1}){
   const actual=events.map(e=>Number(e.peak_ua)),y=actual.map(v=>(state.liveScale==='log'?Math.max(.001,v):v)*unit.factor);
-  return{x:events.map(e=>Number(e.t_s)),y,customdata:events.map((e,i)=>[e.sequence,actual[i],fmtCurrent(actual[i])]),type:'scattergl',mode:'markers',name:'Wake',marker:{symbol:'triangle-up',size:7,color:'#f5bd5b'},hovertemplate:'Wake #%{customdata[0]}<br>t=%{x:.6f}s<br>Peak %{customdata[2]}<extra></extra>'};
+  return{x:events.map(e=>Number(e.t_s)),y,customdata:events.map((e,i)=>[e.sequence,actual[i],fmtCurrent(actual[i])]),type:'scattergl',mode:'markers',name:'Wake',marker:{symbol:'triangle-up',size:7,color:'#f5bd5b'},hovertemplate:'Wake #%{customdata[0]}<br>t=%{x:.6f}s<br>Spitzenstrom %{customdata[2]}<extra></extra>'};
 }
 function stateMarkerLabel(m){return {sleep_start:'Sleep Start',wake_start:'Wake Start',sleep_validated:'Sleep validiert',wake_validated:'Wake validiert',fft_sleep_start:'FFT Sleep (experimentell)',fft_wake_start:'FFT Wake (experimentell)'}[m.kind||'sleep_start']||m.kind}
 function stateMarkerColor(m){return m.kind?.startsWith('fft_')?(m.kind.includes('wake')?'#f472b6':'#22d3ee'):(m.kind?.includes('wake')?'#f5bd5b':'#60a5fa')}
@@ -435,19 +436,19 @@ function renderLiveWakePhases(phases){
 }
 function renderSessionLive(d,force=false){
   const stopping=d.stopping||state.sessionStopPendingId===d.measurement_id;
-  $('sessionStopBtn').disabled=!!stopping;$('sessionStopBtn').textContent=stopping?'Stoppt …':'■ Stop';
+  $('sessionStopBtn').disabled=!!stopping;$('sessionStopBtn').textContent=stopping?'Wird beendet …':'■ Messung beenden';
   $('sessionStatus').textContent=stopping?'STOPPING':d.state==='WAITING_SLEEP'?'SLEEP-SUCHE':'RECORDING';$('sessionTimeMain').textContent=d.state==='WAITING_SLEEP'?d.detection?.expected_sleep_enabled&&d.detection?.expected_sleep_match===false?`Warte auf Ruhebereich bei ${fmtCurrent(d.detection.expected_sleep_ua)}`:`Sleep-Suche: ${(d.detection?.stability_s||0).toFixed(1)} / ${d.detection?.required_stability_s??60} s`:fmtDuration(d.detection?d.detection.timeline_samples/(d.sample_rate_hz||100000):(Date.now()-new Date(d.started_at).getTime())/1000);$('sessionTimeSub').textContent=d.planned_end_at?`Auto-Stop: ${fmtDate(d.planned_end_at)}`:`Start: ${fmtDate(d.started_at)}`;
   $('kpiCurrent').textContent=fmtCurrent(d.current_ua);$('kpiSleep').textContent=fmtCurrent(d.baseline_ua);$('kpiThreshold').textContent=d.detection?`Sleep < ${fmtCurrent(d.detection.sleep_threshold_ua)} · Wake > ${fmtCurrent(d.detection.wake_threshold_ua)}`:'—';$('kpiPeak').textContent=fmtCurrent(d.peak_current_ua);$('kpiWake').textContent=Number(d.wake_count||0).toLocaleString('de-DE');$('kpiBackground').textContent=d.spectral_comparison?`FFT: ${d.spectral_comparison.state} | ${d.spectral_comparison.score_db==null?`${Math.round(d.spectral_comparison.training_s)}/${d.spectral_comparison.reference_s} s Referenz`:d.spectral_comparison.score_db.toFixed(1)+' dB Abweichung'}`:'Feste Schwellen';$('kpiCharge').textContent=fmtCharge(d.total_charge_uc);$('kpiEnergy').textContent=fmtEnergy(d.energy_uwh);
   if(state.liveFollow){refreshLiveSeries({force});}
 }
 async function stopSessionMeasurement(){
   const id=state.sessionMeasurement?.id;if(!id||state.sessionStopPendingId===id)return;
-  state.sessionStopPendingId=id;$('sessionStopBtn').disabled=true;$('sessionStopBtn').textContent='Stoppt …';$('sessionStatus').textContent='STOPPING';
+  state.sessionStopPendingId=id;$('sessionStopBtn').disabled=true;$('sessionStopBtn').textContent='Wird beendet …';$('sessionStatus').textContent='WIRD BEENDET';
   try{await api(`/api/measurements/${id}/stop`,{method:'POST'});toast('Messung beendet')}
-  catch(e){toast(e.message,true);if(state.sessionMeasurement?.id===id)$('sessionStatus').textContent='RECORDING'}
+  catch(e){toast(e.message,true);if(state.sessionMeasurement?.id===id)$('sessionStatus').textContent='AUFZEICHNUNG'}
   finally{
     if(state.sessionStopPendingId===id)state.sessionStopPendingId=null;
-    if(state.sessionMeasurement?.id===id){$('sessionStopBtn').disabled=false;$('sessionStopBtn').textContent='■ Stop'}
+    if(state.sessionMeasurement?.id===id){$('sessionStopBtn').disabled=false;$('sessionStopBtn').textContent='■ Messung beenden'}
   }
 }
 $('backToLive').addEventListener('click',()=>{closeSessionWs();setView('live')});$('editScheduledBtn').addEventListener('click',()=>openMeasurementDialog(state.sessionMeasurement));$('cancelScheduledBtn').addEventListener('click',async()=>{if(!confirm('Geplante Messung wirklich abbrechen?'))return;try{await api(`/api/measurements/${state.sessionMeasurement.id}/cancel`,{method:'POST'});toast('Planung abgebrochen');setView('live')}catch(e){toast(e.message,true)}});$('sessionStopBtn').addEventListener('click',stopSessionMeasurement);
@@ -489,7 +490,7 @@ function renderMeasurementRows(){
   for(const id of state.selectedMeasurementIds)if(!validIds.has(id))state.selectedMeasurementIds.delete(id);
   const rows=visibleMeasurements();
   $('emptyMeasurements').classList.toggle('hidden',rows.length!==0);
-  $('measurementRows').innerHTML=rows.map(m=>`<tr data-id="${escapeHtml(m.id)}" class="${state.selectedMeasurementIds.has(m.id)?'selected':''}"><td class="measurement-select-cell"><input type="checkbox" data-select-measurement="${escapeHtml(m.id)}" aria-label="Messung ${escapeHtml(m.name)} auswählen" ${state.selectedMeasurementIds.has(m.id)?'checked':''} ${state.measurementBulkBusy?'disabled':''}></td><td>${escapeHtml(fmtDate(m.started_at||m.created_at))}</td><td><button type="button" class="measurement-open" aria-label="Messung ${escapeHtml(m.name)} öffnen">${escapeHtml(m.name)}</button></td><td>${escapeHtml([m.project,m.device].filter(Boolean).join(' · ')||'—')}</td><td>${escapeHtml(m.firmware||'—')}</td><td>${escapeHtml(fmtDuration(m.duration_s))}</td><td>${escapeHtml(fmtCurrent(m.sleep_current_ua))}</td><td>${Number(m.wake_count||0).toLocaleString('de-DE')}</td><td><span class="status-badge ${escapeHtml(m.status)}">${escapeHtml(m.status)}</span></td></tr>`).join('');
+  $('measurementRows').innerHTML=rows.map(m=>`<tr data-id="${escapeHtml(m.id)}" class="${state.selectedMeasurementIds.has(m.id)?'selected':''}"><td class="measurement-select-cell"><input type="checkbox" data-select-measurement="${escapeHtml(m.id)}" aria-label="Messung ${escapeHtml(m.name)} auswählen" ${state.selectedMeasurementIds.has(m.id)?'checked':''} ${state.measurementBulkBusy?'disabled':''}></td><td>${escapeHtml(fmtDate(m.started_at||m.created_at))}</td><td><button type="button" class="measurement-open" aria-label="Messung ${escapeHtml(m.name)} öffnen">${escapeHtml(m.name)}</button></td><td>${escapeHtml([m.project,m.device].filter(Boolean).join(' · ')||'—')}</td><td>${escapeHtml(m.firmware||'—')}</td><td>${escapeHtml(fmtDuration(m.duration_s))}</td><td>${escapeHtml(fmtCurrent(m.sleep_current_ua))}</td><td>${Number(m.wake_count||0).toLocaleString('de-DE')}</td><td><span class="status-badge ${escapeHtml(m.status)}">${escapeHtml(measurementStatusLabel(m.status))}</span></td></tr>`).join('');
   document.querySelectorAll('#measurementRows tr').forEach(r=>r.addEventListener('click',e=>{if(!e.target.closest('.measurement-select-cell'))openMeasurement(r.dataset.id)}));
   document.querySelectorAll('[data-select-measurement]').forEach(box=>box.addEventListener('change',()=>{
     if(state.measurementBulkBusy)return;
@@ -591,7 +592,7 @@ function renderDetectionMetadata(m){
     ]));
   }
   const spectral=m.settings?.spectral_result;
-  if(spectral)groups.push(group('Spektralvergleich (experimentell)','detail-neutral',[['Letzter FFT-Zustand',spectral.state],['FFT-Wakes',String(spectral.wake_count)],['Abweichungsschwelle',`${spectral.margin_db} dB`],['Referenz',`${Math.round(spectral.training_s)} / ${spectral.reference_s} s`],['Ereignisse und Stopps','Stromschwellen und Mindestdauer']]));
+  if(spectral)groups.push(group('Spektralvergleich (experimentell)','detail-neutral',[['Letzter FFT-Zustand',spectral.state],['FFT-Wake-Ereignisse',String(spectral.wake_count)],['Abweichungsschwelle',`${spectral.margin_db} dB`],['Referenz',`${Math.round(spectral.training_s)} / ${spectral.reference_s} s`],['Ereignisse und Messende','Stromschwellen und Mindestdauer']]));
   $('detailDetection').innerHTML=groups.join('');
   $('detailDetectionSection').classList.toggle('hidden',!groups.length);
 }
@@ -600,7 +601,7 @@ function renderSleepAnalysis(data){
   for(const [id,key,format] of [['Time','recorded_duration_s',fmtDuration],['Current','average_current_ua',fmtCurrent],['Charge','charge_uc',fmtCharge],['Energy','energy_uwh',fmtEnergy],['ValidDuration','average_valid_duration_s',fmtDuration],['ValidEnergy','average_valid_energy_uwh',fmtEnergy]]){
     $(`detailSleep${id}`).textContent=format(data?.[key]??null);
   }
-  $('detailSleepNote').textContent=`${data?.recorded_segment_count??0} gespeicherte Sleep-Abschnitte, ${data?.background_count??0} zugeordnete Hintergrundereignisse. Die erfassten Kennwerte zählen empfangene Samples ohne Ergänzung von Datenlücken, auch ohne vollständigen Wake-Zyklus. Speicher-Checkpoints sind keine eigenen Sleep-Phasen.`;
+  $('detailSleepNote').textContent=`${data?.recorded_segment_count??0} gespeicherte Sleep-Abschnitte, ${data?.background_count??0} zugeordnete Hintergrundereignisse. Die Kennwerte basieren auf empfangenen Messwerten ohne Ergänzung von Datenlücken und berücksichtigen auch unvollständige Wake-Zyklen. Gespeicherte Teilabschnitte bilden keine zusätzlichen Sleep-Phasen.`;
 }
 
 function renderEventProtocol(m,overview){
@@ -654,13 +655,13 @@ function renderMeasurementDetail(m,overview){
   renderSleepAnalysis(m.sleep_analysis);
   const a=overview.analysis||{};
   WakeAnalysisUI.render(m.cycle_energy||a.confirmed_cycles,'detail');
-  $('detailStatus').textContent=({completed:'Abgeschlossen',failed:'Fehlgeschlagen',cancelled:'Abgebrochen',recording:'Aufzeichnung',scheduled:'Geplant',starting:'Startet'})[m.status]||m.status||'—';
+  $('detailStatus').textContent=measurementStatusLabel(m.status);
   $('detailStatus').className=`status-badge ${['completed','failed','cancelled','recording','scheduled','starting'].includes(m.status)?m.status:''}`;
   $('detailName').textContent=m.name;
   renderDetectionMetadata(m);
   $('detailError').textContent=m.error?`Abbruchgrund: ${m.error}`:'';
   $('detailError').classList.toggle('hidden',!m.error);
-  $('detailMeta').textContent=[m.project,m.device,m.serial_number?`SN: ${m.serial_number}`:'',m.firmware?`FW: ${m.firmware}`:'',m.hardware_version?`HW: ${m.hardware_version}`:'',...(m.custom_fields||[]).map(field=>`${field.label}: ${field.value||'—'}`)].filter(Boolean).join(' · ')||'Ohne Metadaten';
+  $('detailMeta').textContent=[m.project,m.device,m.serial_number?`SN: ${m.serial_number}`:'',m.firmware?`FW: ${m.firmware}`:'',m.hardware_version?`HW: ${m.hardware_version}`:'',...(m.custom_fields||[]).map(field=>`${field.label}: ${field.value||'—'}`)].filter(Boolean).join(' · ')||'Keine ergänzenden Metadaten hinterlegt';
   $('detailDuration').textContent=fmtDuration(m.duration_s);
   $('detailStarted').textContent=fmtDate(m.started_at);
   $('detailSleep').textContent=fmtCurrent(['threshold','spectral_compare'].includes(m.settings?.detection_mode)?a.average_sleep_current_ua:(a.average_sleep_current_ua ?? m.sleep_current_ua));
@@ -673,13 +674,13 @@ function renderMeasurementDetail(m,overview){
   $('detailEnergy').textContent=fmtEnergy(m.energy_uwh);
 
   const ppk=m.ppk2_config||{};
-  const contextGroups=[['Messung & Gerät',[
+  const contextGroups=[['Messkontext',[
     ['Projekt',m.project||'—'],
-    ['Gerät',m.device||'—'],
+    ['Prüfling',m.device||'—'],
     ['Seriennummer',m.serial_number||'—'],
     ['Firmware-Version',m.firmware||'—'],
     ['Hardware-Version',m.hardware_version||'—'],
-  ].filter(([,value])=>value!=='—').concat([['Name',m.name],...(m.custom_fields||[]).map(field=>[field.label,field.value||'—']),['Notiz',m.notes||'—']])],['Aufzeichnung',[
+  ].filter(([,value])=>value!=='—').concat([['Messbezeichnung',m.name],...(m.custom_fields||[]).map(field=>[field.label,field.value||'—']),['Prüfbedingungen / Anmerkungen',m.notes||'—']])],['Aufzeichnung',[
     ['PPK2 ID',m.ppk2_id||'—'],
     ['COM-Port',m.port||'—'],
     ['USB-Seriennummer',ppk.serial||'—'],
@@ -690,9 +691,9 @@ function renderMeasurementDetail(m,overview){
   ]],['Messqualität & Statistik',[
     ['Ø Gesamtstrom',fmtCurrent(m.average_current_ua)],
     ['Spitzenstrom',fmtCurrent(m.peak_current_ua)],
-    ['Perioden σ',fmtDuration(a.period_std_s)],
+    ['Standardabweichung der Periodendauer',fmtDuration(a.period_std_s)],
     ['Datenabdeckung',`${Number(m.data_coverage_pct??100).toFixed(6)} %`],
-    ['Verlorene Samples',Number(m.detected_lost_samples||0).toLocaleString('de-DE')]
+    ['Erkannte Messwertverluste',Number(m.detected_lost_samples||0).toLocaleString('de-DE')]
   ]]];
   $('metadataList').innerHTML=contextGroups.map(([title,fields])=>`<section><h4>${escapeHtml(title)}</h4><dl>${fields.map(([k,v])=>`<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl></section>`).join('');
   $('ppkConfigDetails').classList.remove('hidden');
@@ -739,7 +740,7 @@ function bindOverviewScrollZoom(el){
   const update=()=>{
     const active=document.activeElement===el;
     el.classList.toggle('scroll-zoom-active',active);
-    hint.textContent=active?'Scroll-Zoom aktiv · Außerhalb klicken oder Esc zum Beenden.':'Chart anklicken, um mit dem Mausrad zu zoomen.';
+    hint.textContent=active?'Scroll-Zoom aktiv · Außerhalb klicken oder Esc zum Beenden.':'Diagramm anklicken, um den Mausrad-Zoom zu aktivieren.';
   };
   el.addEventListener('wheel',ev=>{
     // Let the browser scroll the page while keeping Plotly from handling the wheel.
@@ -781,7 +782,7 @@ function renderOverviewChart(overview,{force=false}={}){
       customdata:events.map(e=>[Number(e.id),Number(e.sequence),Number(e.duration_us),Number(e.mean_ua),Number(e.peak_ua)]),
       type:'scatter',mode:'markers',name:'Wake event',
       marker:{symbol:'triangle-up',size:10,color:'#f5bd5b',line:{width:1,color:'#201707'}},
-      hovertemplate:'Wake #%{customdata[1]}<br>%{x}<br>Dauer %{customdata[2]:.0f} µs<br>Ø %{customdata[3]:.3f} µA<br>Peak %{customdata[4]:.3f} µA<extra></extra>'
+      hovertemplate:'Wake #%{customdata[1]}<br>%{x}<br>Dauer %{customdata[2]:.0f} µs<br>Ø %{customdata[3]:.3f} µA<br>Spitzenstrom %{customdata[4]:.3f} µA<extra></extra>'
     });
   }
 
@@ -800,7 +801,7 @@ function renderOverviewChart(overview,{force=false}={}){
 
   $('historyOverviewTitle').textContent='Sleep / Wake-Verlauf';
   const period=analysis.average_period_s==null?'—':fmtDuration(analysis.average_period_s);
-  $('historyOverviewSubtitle').textContent=`Exakte Zustandswechsel · Ø Periode ${period} · Wake-Marker öffnen 100-kS/s-Rohdaten`;
+  $('historyOverviewSubtitle').textContent=`Erkannte Zustandswechsel · Ø Periode ${period} · Wake-Marker öffnen 100-kS/s-Rohdaten`;
 
   const layout={
     paper_bgcolor:'transparent',plot_bgcolor:'transparent',margin:{l:92,r:24,t:10,b:68},
@@ -825,7 +826,7 @@ function renderOverviewChart(overview,{force=false}={}){
       const eventId=Array.isArray(cd)?Number(cd[0]||0):0;
       if(eventId)openEvent(eventId);
     });
-  }).catch(err=>{console.error('State history chart render failed',err);toast('Sleep/Wake-History konnte nicht gerendert werden.',true)});
+  }).catch(err=>{console.error('State history chart render failed',err);toast('Der Sleep-/Wake-Verlauf konnte nicht dargestellt werden.',true)});
 }
 
 async function openEvent(id){
@@ -839,8 +840,8 @@ async function openEvent(id){
   selectEventRow(id);
   showWakeEventPanel();
   const renderToken=++state.historyRenderToken;
-  $('wakeEventTitle').textContent='Wake Event wird geladen …';
-  $('wakeEventSubtitle').textContent=`Event ${id} · Übersicht wird geladen`;
+  $('wakeEventTitle').textContent='Wake-Ereignis wird geladen …';
+  $('wakeEventSubtitle').textContent=`Ereignis ${id} · Übersicht wird geladen`;
   const chart=$('wakeEventChart');
   try{Plotly.purge(chart)}catch(_){}
   chart.innerHTML='';chart.classList.add('hidden');
@@ -863,12 +864,12 @@ async function openEvent(id){
     if(renderToken===state.historyRenderToken){
       state.historyMode='event-error';
       state.currentEvent=null;
-      $('wakeEventTitle').textContent='Wake Event konnte nicht geladen werden';
+      $('wakeEventTitle').textContent='Wake-Ereignis konnte nicht geladen werden';
       $('wakeEventSubtitle').textContent=e.message;
       try{Plotly.purge(chart)}catch(_){}
       chart.classList.add('hidden');status.className='event-load-error';
-      status.innerHTML=`<strong>Rohdaten nicht verfügbar.</strong><br>${escapeHtml(e.message)}<br><small>Die Zustandsübersicht und Event-Metadaten bleiben erhalten.</small>`;
-      toast(`Wake-Event konnte nicht geladen werden: ${e.message}`,true);
+      status.innerHTML=`<strong>Rohdaten nicht verfügbar.</strong><br>${escapeHtml(e.message)}<br><small>Die Zustandsübersicht und Ereignismetadaten bleiben erhalten.</small>`;
+      toast(`Wake-Ereignis konnte nicht geladen werden: ${e.message}`,true);
     }
   }
 }
@@ -991,15 +992,15 @@ function renderEventChart(d,renderToken=++state.historyRenderToken){
   const y=display.map(v=>v==null?null:(state.historyScale==='log'?Math.max(.001,v):v)*unit.factor);
   // Keep the bounded event waveform and its markers in one SVG layer so rings
   // stay smooth and appear above the current trace.
-  const traces=[{x:d.t_us||[],y,customdata:smoothed?actual.map((v,i)=>[v,display[i]]):actual,type:'scatter',mode:'lines',name:d.aggregated?'Block-Minima/Maxima':(smoothed?'Current · geglättet':'Current'),line:{width:1.1,color:'#65d98b'},hoverinfo:'none',yaxis:'y'}];
+  const traces=[{x:d.t_us||[],y,customdata:smoothed?actual.map((v,i)=>[v,display[i]]):actual,type:'scatter',mode:'lines',name:d.aggregated?'Block-Minima/Maxima':(smoothed?'Strom · geglättet':'Strom'),line:{width:1.1,color:'#65d98b'},hoverinfo:'none',yaxis:'y'}];
   for(let bit=0;bit<8;bit++)if(!d.aggregated&&!d.downsampled&&(Number(e.digital_mask_seen||0)&(1<<bit))!==0)traces.push({...digitalTransitionTrace(d.t_us||[],d.digital||[],bit),type:'scatter'});
   for(const trace of traces)trace.hoverinfo='none';
   showWakeEventPanel();
   selectEventRow(e.id);
-  $('wakeEventTitle').textContent=`Wake Event #${e.sequence}`;
-  $('wakeEventSubtitle').innerHTML=`${escapeHtml(fmtDate(e.trigger_at))} · ${escapeHtml(fmtEventDuration(e.duration_us))} · Ø ${escapeHtml(fmtCurrent(e.mean_ua))} · Peak ${escapeHtml(fmtCurrent(e.peak_ua))} · <a href="/api/measurements/${state.currentMeasurement.id}/events/${e.id}/csv">Rohdaten CSV ↓</a>`;
+  $('wakeEventTitle').textContent=`Wake-Ereignis #${e.sequence}`;
+  $('wakeEventSubtitle').innerHTML=`${escapeHtml(fmtDate(e.trigger_at))} · ${escapeHtml(fmtEventDuration(e.duration_us))} · Ø ${escapeHtml(fmtCurrent(e.mean_ua))} · Spitzenstrom ${escapeHtml(fmtCurrent(e.peak_ua))} · <a href="/api/measurements/${state.currentMeasurement.id}/events/${e.id}/csv">Rohdaten CSV ↓</a>`;
   if(smoothed)$('wakeEventSubtitle').innerHTML+=` · Glättung: ${{light:'leicht',medium:'mittel',strong:'stark'}[state.historySmoothing]} (nur Darstellung)`;
-  const displayHint=d.display_notice||(d.aggregated||d.downsampled?'Die Ansicht zeigt eine Min/Max-Auswahl mit originalen Sample-Zeiten. Beim Zoomen werden feinere Daten bis zu den Rohsamples nachgeladen.':'Alle Rohsamples im sichtbaren Bereich werden angezeigt.');
+  const displayHint=d.display_notice||(d.aggregated||d.downsampled?'Die Ansicht zeigt eine Min/Max-Auswahl mit ursprünglichen Abtastzeitpunkten. Beim Zoomen werden feinere Daten bis zur Rohdatenauflösung nachgeladen.':'Alle Rohmesswerte im sichtbaren Bereich werden angezeigt.');
   $('wakeEventSubtitle').innerHTML+=` · ${(d.t_us||[]).length.toLocaleString('de-DE')} Punkte <span class="field-help event-display-help"><button type="button" class="info-button" aria-label="Information zur Datendarstellung" aria-describedby="eventDisplayHint">i</button><span id="eventDisplayHint" class="field-tooltip" role="tooltip">${escapeHtml(displayHint)}</span></span>`;
   const hasDigital=traces.length>1;
   const eventMarkers=d.state_markers||[];
@@ -1089,7 +1090,7 @@ function renderThresholdPreview(){
 function updateEventSettings(){
   CurrentInputs.sync();TimeInputs.sync();
   const sleep=CurrentInputs.ua($('sleepThresholdUa')),wake=CurrentInputs.ua($('wakeThresholdUa'));
-  $('wakeThresholdUa').setCustomValidity(wake<=sleep?'Wake muss höher als Sleep sein.':'');
+  $('wakeThresholdUa').setCustomValidity(wake<=sleep?'Die Wake-Schwelle muss über der Sleep-Schwelle liegen.':'');
   renderThresholdPreview();
 }
 CurrentInputs.install();

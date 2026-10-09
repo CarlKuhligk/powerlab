@@ -50,7 +50,7 @@ async function renderLiveSpectrogram(series){
   if(!document.getElementById('spectrogramToggle').checked)return;
   const spectral=series?.spectrogram,frames=spectral?.frames||[];
   const hint=document.getElementById('spectrogramHint');
-  hint.textContent=frames.length?`Letzte ${spectral.history_s} s · ${Math.round(spectral.window_s*1000)}-ms-Fenster · ${(1/spectral.window_s).toLocaleString('de-DE',{maximumFractionDigits:2})} Hz FFT-Abstand · Mittelwert entfernt`:'Warte auf ein vollständiges 250-ms-Messfenster …';
+  hint.textContent=frames.length?`Letzte ${spectral.history_s} s · ${Math.round(spectral.window_s*1000)}-ms-Fenster · ${(1/spectral.window_s).toLocaleString('de-DE',{maximumFractionDigits:2})} Hz Frequenzauflösung · Mittelwert entfernt`:'Vollständiges 250-ms-Messfenster wird erfasst …';
   const x=[],columns=[];
   const hasComparison=Boolean(state.lastLiveSnapshot?.spectral_comparison);
   document.getElementById('spectrogramFftSleep').classList.toggle('hidden',!hasComparison);

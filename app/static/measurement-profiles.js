@@ -14,7 +14,7 @@ const MeasurementProfiles=(()=>{
   function setSaving(saving){
     el('measurementProfileName').disabled=saving;
     el('measurementProfileConfirm').disabled=saving;
-    el('measurementProfileConfirm').textContent=saving?'Speichert …':'Profil speichern';
+    el('measurementProfileConfirm').textContent=saving?'Wird gespeichert …':'Profil speichern';
     document.querySelectorAll('[data-close-profile-dialog]').forEach(button=>button.disabled=saving);
     el('measurementProfileSave').disabled=saving||el('measurementForm').dataset.submitting==='1';
     el('measurementSubmit').disabled=saving||el('measurementForm').dataset.submitting==='1';
@@ -48,7 +48,7 @@ const MeasurementProfiles=(()=>{
       const loaded=await api('/api/measurement-profiles');
       if(token!==el('measurementForm').dataset.dialogToken||!el('measurementDialog').open)return;
       profiles=loaded;render();
-      status(profiles.length?'Ein Profil übernimmt die gespeicherten Werte in das Formular. Du kannst sie anschließend anpassen.':'Noch keine Messprofile. Über „Einstellungen speichern“ kannst du ein Profil anlegen.');
+      status(profiles.length?'Das Messprofil übernimmt gespeicherte Messparameter und Metadaten. Die übernommenen Werte können vor Messbeginn angepasst werden.':'Keine Messprofile hinterlegt. „Einstellungen speichern“ legt die aktuelle Konfiguration als Messprofil ab.');
     }catch(error){
       if(token===el('measurementForm').dataset.dialogToken){profiles=[];render();status(`Messprofile konnten nicht geladen werden: ${error.message}`)}
     }finally{
@@ -83,7 +83,7 @@ const MeasurementProfiles=(()=>{
         select.value=profile.id;
       }
       renderDevices(state.devices);updateScheduleFields();updateSpectralSettings();updateEventSettings();
-      status(profile?`Messprofil „${profile.name}“ übernommen. Alle Werte können angepasst werden.`:'Ohne Messprofil: Standardparameter und leere Messungsangaben.');
+      status(profile?`Messprofil „${profile.name}“ übernommen. Alle Werte können angepasst werden.`:'Standardparameter geladen. Messbezeichnung und Prüfbedingungen ergänzen.');
     }catch(error){toast(error.message,true)}finally{if(token===form.dataset.dialogToken)select.disabled=false}
   }
   async function save(name,payload,token){
